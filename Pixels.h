@@ -9,6 +9,8 @@
  *
  * This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License. To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-sa/3.0/
  *
+ * Commercial use of the library is possible for licensees of "Pixelmeister (for industry)" product.
+ *
  * This library includes some code portions and algoritmic ideas derived from works of
  * - Andreas Schiffler -- aschiffler at ferzkopp dot net (SDL_gfx Project)
  * - K. Townsend http://microBuilder.eu (lpc1343codebase Project)
