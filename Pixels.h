@@ -86,6 +86,10 @@
 #define ORIGIN_RELATIVE true // origin relative to a current scroll position
 #define ORIGIN_ABSOLUTE false // origin matches physical device pixel coordinates
 
+#define PORTRAIT 0
+#define LANDSCAPE 1
+#define PORTRAIT_FLIP 2
+#define LANDSCAPE_FLIP 3
 
 #define ipart(X) ((uint16_t)(X))
 #define round(X) ((uint16_t)(((double)(X))+0.5))
@@ -110,12 +114,37 @@ public:
 
 class Pixels {
 private:
-    /* device */
+    /* device physical dimension in portrait orientation */
     uint16_t deviceWidth;
     uint16_t deviceHeight;
 
+    /* device logical dimension in current orientation */
+    uint16_t width;
+    uint16_t height;
+
+    boolean landscape;
+
+    uint8_t orientation;
+
+    boolean relativeOrigin;
+
     /* currently selected font */
     prog_uchar* currentFont;
+
+    RGB foreground;
+    RGB background;
+
+    double lineWidth;
+
+    uint8_t fillDirection;
+    boolean antialiasing;
+
+    boolean scrollSupported;
+    boolean scrollEnabled;
+
+    int16_t currentScroll;
+    int16_t flipScroll;
+    boolean scrollCleanMode;
 
     regtype *registerRS; // register select
     regtype *registerCS; // chip select
@@ -129,24 +158,12 @@ private:
     regsize bitmaskRD;
     regsize bitmaskRST;
 
-    RGB foreground;
-    RGB background;
-
-    double lineWidth;
-    int16_t currentScroll;
-    int16_t maxScroll;
-    int16_t scrollWidth;
-    uint8_t fillDirection;
-    boolean scrollSupported;
-    boolean antialiasing;
-    boolean landscape;
-
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
 
     void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     void setCurrentPixel(RGB color);
     void setCurrentPixel(int16_t color);
-    void quickFill(int b, int32_t counter);
+    void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2, boolean valid);
     void putColor(int16_t x, int16_t y, boolean steep, double weight);
     RGB computeColor(RGB, double weight);
 
@@ -171,15 +188,24 @@ public:
     Pixels(uint16_t width, uint16_t height);
 
     void init();
-    void setLandscape();
-    void setPortrait();
-    boolean isLandscape();
+
+    void setOrientation( uint8_t );
+    uint8_t getOrientation();
 
     void enableAntialiasing(boolean enable);
     boolean isAntialiased();
 
+    void enableScroll(boolean enable);
+    boolean canScroll();
+
     void setLineWidth(double width);
     double getLineWidth();
+
+    void setOriginRelative();
+    void setOriginAbsolute();
+    boolean isOriginRelative();
+
+    void setFillDirection(uint8_t direction);
 
     void clear();
 
@@ -190,8 +216,6 @@ public:
     RGB getBackground();
     RGB getColor();
 
-    void setOrigin(boolean relative);
-
     RGB getPixel(int16_t x, int16_t y);
     void drawPixel(int16_t x, int16_t y);
     void drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -200,8 +224,6 @@ public:
     void drawOval(int16_t x, int16_t y, int16_t width, int16_t height);
     void drawRectangle(int16_t x, int16_t y, int16_t width, int16_t height);
     void drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r);
-
-    void setFillDirection(uint8_t direction);
 
     void fillCircle(int16_t x, int16_t y, int16_t radius);
     void fillOval(int16_t x, int16_t y, int16_t width, int16_t height);
@@ -212,12 +234,13 @@ public:
     int8_t loadBitmap(int16_t x, int16_t y, int16_t width, int16_t height, String path);
 
     void scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags);
+    void scroll(int16_t dy, int8_t flags);
 
     int setFont(prog_uchar font[]);
     void print(int16_t xx, int16_t yy, String text, int8_t kerning[] = NULL);
-    void clean(int16_t xx, int16_t yy, String text, int8_t kerning[] = NULL);
-    int16_t getLineHeight();
-    int16_t getBaseline();
+    void cleanText(int16_t xx, int16_t yy, String text, int8_t kerning[] = NULL);
+    int16_t getTextLineHeight();
+    int16_t getTextBaseline();
     int16_t getTextWidth(String text, int8_t kerning[] = NULL);
 };
 

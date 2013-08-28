@@ -45,15 +45,21 @@ Pixels::Pixels() {
 }
 
 Pixels::Pixels(uint16_t width, uint16_t height) {
-    deviceWidth = width;
-    deviceHeight = height;
-    lineWidth = 1;
+    deviceWidth = width < height ? width : height;
+    deviceHeight = width > height ? width : height;
+    this->width = width;
+    this->height = height;
+    orientation = width > height ? LANDSCAPE : PORTRAIT;
+
+    relativeOrigin = true;
+
     currentScroll = 0;
-    fillDirection = 0;
     scrollSupported = true;
-    landscape = false;
-    maxScroll = deviceHeight > deviceWidth ? deviceHeight : deviceWidth;
-    scrollWidth = deviceHeight < deviceWidth ? deviceHeight : deviceWidth;
+    scrollEnabled = true;
+
+    lineWidth = 1;
+    fillDirection = 0;
+
     setBackground(0,0,0);
     setColor(0xFF,0xFF,0xFF);
 }
@@ -83,18 +89,33 @@ RGB Pixels::getBackground() {
 }
 
 
-/**  Graphic primitives */
+void Pixels::setOrientation( uint8_t direction ){
 
-void Pixels::setLandscape(){
-    landscape = true;
+    orientation = direction;
+
+    switch ( orientation ) {
+    case LANDSCAPE_FLIP:
+    case LANDSCAPE:
+        width = deviceHeight;
+        height = deviceWidth;
+        landscape = true;
+        break;
+    case PORTRAIT_FLIP:
+        width = deviceWidth;
+        height = deviceHeight;
+        landscape = false;
+        break;
+    default:
+        width = deviceWidth;
+        height = deviceHeight;
+        landscape = false;
+        orientation = PORTRAIT;
+        break;
+    }
 }
 
-void Pixels::setPortrait(){
-    landscape = false;
-}
-
-boolean Pixels::isLandscape() {
-    return landscape;
+uint8_t Pixels::getOrientation() {
+    return orientation;
 }
 
 void Pixels::enableAntialiasing(boolean enable){
@@ -105,20 +126,43 @@ boolean Pixels::isAntialiased(){
     return antialiasing;
 }
 
+void Pixels::setOriginRelative() {
+    relativeOrigin = true;
+}
+
+void Pixels::setOriginAbsolute() {
+    relativeOrigin = false;
+}
+
+boolean Pixels::isOriginRelative() {
+    return relativeOrigin;
+}
+
+void Pixels::enableScroll(boolean enable) {
+    scrollEnabled = enable;
+}
+
+boolean Pixels::canScroll() {
+    return scrollEnabled & scrollSupported;
+}
+
+
+/**  Graphic primitives */
+
 void Pixels::clear() {
-    if ( scrollSupported ) {
-        scroll(deviceWidth, 0, deviceHeight, SCROLL_SMOOTH | SCROLL_CLEAN);
+    if ( canScroll() ) {
+        scroll(deviceHeight, 0, deviceWidth, SCROLL_SMOOTH | SCROLL_CLEAN);
     } else {
         RGB sav = getColor();
         setColor(background);
-        fillRectangle(0, 0, deviceWidth, deviceHeight);
+        fillRectangle(0, 0, width, height);
         setColor(sav);
     }
 }
 
 RGB Pixels::getPixel(int16_t x, int16_t y) {
-    if ( x < 0 || x >= deviceWidth || y < 0 || y >= deviceHeight ) {
-        return RGB(0, 0, 0);
+    if ( x < 0 || x >= width || y < 0 || y >= height ) {
+        return  getBackground();
     }
     return getBackground();
 }
@@ -199,27 +243,15 @@ void Pixels::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 }
 
 void Pixels::drawRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
-    drawLine(x, y, x+width-1, y);
-    drawLine(x+width, y, x+width, y+height-1);
-    drawLine(x+width, y+height, x+1, y+height);
-    drawLine(x, y+height, x, y+1);
+    drawLine(x, y, x+width-2, y);
+    drawLine(x+width-1, y, x+width-1, y+height-2);
+    drawLine(x+1, y+height-1, x+width-1, y+height-1);
+    drawLine(x, y+1, x, y+height-1);
 }
 
 void Pixels::fillRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
-    cbi(registerCS, bitmaskCS);
-
     int16_t color = foreground.convertTo565();
-    if ( fillDirection == 0 ) {
-        setRegion(x, y, x+width, y+height);
-        quickFill(color, (int32_t)(width+1) * (height+1));
-    } else {
-        for (int16_t yy = y+height; yy >= y; yy--) {
-            setRegion(x, yy, x+width, yy);
-            quickFill(color, width);
-        }
-    }
-    sbi(registerCS, bitmaskCS);
-    resetRegion();
+    quickFill(color, x, y, x+width-1, y+height-1, false);
 }
 
 void Pixels::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
@@ -947,7 +979,7 @@ void Pixels::print(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
 	printString(xx, yy, text, 0, kerning);
 }
 
-void Pixels::clean(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
+void Pixels::cleanText(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
 	printString(xx, yy, text, 1, kerning);
 }
 
@@ -1179,7 +1211,7 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
     setColor(fg);
 }
 
-int16_t Pixels::getLineHeight() {
+int16_t Pixels::getTextLineHeight() {
     if ( currentFont == NULL ) {
         return 0;
     }
@@ -1192,7 +1224,7 @@ int16_t Pixels::getLineHeight() {
     return pgm_read_byte_near(currentFont + 3);
 }
 
-int16_t Pixels::getBaseline() {
+int16_t Pixels::getTextBaseline() {
     if ( currentFont == NULL ) {
         return 0;
     }
@@ -1264,7 +1296,7 @@ int16_t Pixels::getTextWidth(String text, int8_t kerning[]) {
 /** Low level */
 
 void Pixels::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
-    if ( x < 0 || x >= deviceWidth || y < 0 || y >= deviceHeight ) {
+    if ( x < 0 || x >= width || y < 0 || y >= height ) {
         return;
     }
     if ( steep ) {
@@ -1299,7 +1331,15 @@ RGB Pixels::computeColor(RGB bg, double alpha) {
     return RGB(sr, sg, sb);
 }
 
+void Pixels::scroll(int16_t dy, int8_t flags) {
+    scroll(dy, 0, deviceWidth, flags);
+}
+
 void Pixels::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
+
+    if(!canScroll()) {
+        return;
+    }
 
     int16_t mdy = dy > 0 ? dy : -dy;
 
@@ -1327,104 +1367,117 @@ void Pixels::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
         }
 
     } else {
-        currentScroll += dy;
-        currentScroll %= maxScroll;
-        if ( currentScroll < 0 ) {
-            currentScroll += maxScroll;
+
+        if ( orientation > LANDSCAPE ) {
+            dy = -dy;
         }
+
+        currentScroll += dy;
+
+        while ( currentScroll < 0 ) {
+            currentScroll += deviceHeight;
+        }
+
+        currentScroll %= deviceHeight;
+        flipScroll = (deviceHeight - currentScroll) % deviceHeight;
 
         cbi(registerCS, bitmaskCS);
         deviceWriteCmd(0x6A);
-        deviceWriteData(currentScroll>>8, currentScroll);
+        deviceWriteData(highByte(currentScroll), lowByte(currentScroll));
         sbi(registerCS, bitmaskCS);
 
         if ( (flags & SCROLL_CLEAN) > 0 ) {
+
+            scrollCleanMode = true;
             RGB sav = getColor();
             setColor(getBackground());
 
-            if (mdy == 1) {
-                if ( dy > 0 ) {
-                    if (currentScroll > 0) {
-                        drawLine(0, currentScroll-1, scrollWidth-1, currentScroll-1);
-                    } else {
-                        drawLine(0, maxScroll-1, scrollWidth-1, maxScroll-1);
-                    }
+            boolean changed = false;
+            if ( relativeOrigin ) {
+                relativeOrigin = false;
+                changed = true;
+            }
+
+            int16_t savScroll = currentScroll;
+
+            if ( orientation > LANDSCAPE ) {
+                currentScroll = flipScroll;
+                dy = -dy;
+            }
+
+            switch ( orientation ) {
+            case PORTRAIT:
+            case PORTRAIT_FLIP:
+                if ( dy < 0 ) {
+                    fillRectangle(0, 0, deviceWidth, mdy);
                 } else {
-                    if (currentScroll < maxScroll-1) {
-                        drawLine(0, currentScroll+1, scrollWidth-1, currentScroll+1);
-                    } else {
-                        drawLine(0, 0, scrollWidth-1, 0);
-                    }
+                    fillRectangle(0, deviceHeight-mdy, deviceWidth, mdy);
                 }
-            } else {
-                if ( dy > 0 ) {
-                    if (currentScroll >= dy) {
-                        fillRectangle(0, currentScroll-dy, scrollWidth-1, dy-1);
-                    } else {
-                        fillRectangle(0, maxScroll+currentScroll-dy, scrollWidth-1, dy-currentScroll-1);
-                        fillRectangle(0, 0, scrollWidth-1, currentScroll-1);
-                   }
+                break;
+            case LANDSCAPE:
+            case LANDSCAPE_FLIP:
+                if ( dy < 0 ) {
+                    fillRectangle(0, 0, mdy, deviceWidth);
                 } else {
-                    uint8_t fds = fillDirection;
-                    fillDirection = FILL_DOWNTOP;
-                    if (currentScroll <= maxScroll+dy) {
-                        fillRectangle(0, currentScroll+1, scrollWidth-1, -dy-1);
-                    } else {
-                        fillRectangle(0, currentScroll+1, scrollWidth-1, maxScroll-currentScroll-1);
-                        fillRectangle(0, 0, scrollWidth-1, currentScroll-(maxScroll+dy));
-                    }
-                    fillDirection = fds;
+                    fillRectangle(deviceHeight-mdy, 0, mdy, deviceWidth);
                 }
+                break;
+            }
+
+            currentScroll = savScroll;
+
+            if ( changed ) {
+                relativeOrigin = true;
             }
             setColor(sav);
+            scrollCleanMode = false;
         }
     }
 }
 
 
 void Pixels::drawPixel(int16_t x, int16_t y) {
-    if ( x < 0 || x >= deviceWidth || y < 0 || y >= deviceHeight ) {
+
+    if ( x < 0 || y < 0 || x >= width || y >= height ) {
         return;
     }
+
+    if ( relativeOrigin ) {
+        if ( currentScroll != 0 ) {
+            if ( landscape ) {
+                int edge = currentScroll;
+                if ( !scrollCleanMode && x == edge || x > edge ) {
+                    return;
+                }
+            } else {
+                int edge = currentScroll;
+                if ( !scrollCleanMode && y == edge || y > edge ) {
+                    return;
+                }
+            }
+        }
+    } else {
+        if ( landscape ) {
+            x = (x + deviceHeight + currentScroll) % deviceHeight;
+        } else {
+            y = (y + deviceHeight + currentScroll) % deviceHeight;
+        }
+    }
+
     cbi(registerCS, bitmaskCS);
     setRegion(x, y, x, y);
     setCurrentPixel(foreground);
     sbi(registerCS, bitmaskCS);
-    resetRegion();
 }
 
 void Pixels::hLine(int16_t x1, int16_t y, int16_t x2) {
-    if ( x1 < 0 || x1 >= deviceWidth || x2 < 0 || x2 >= deviceWidth || y < 0 || y >= deviceHeight ) {
-        return;
-    }
-
-    if (x2 < x1) {
-        swap(x1, x2);
-    }
-
     int16_t color = foreground.convertTo565();
-    cbi(registerCS, bitmaskCS);
-    setRegion(x1, y, x2, y);
-    quickFill(color, x2 - x1 + 1);
-    sbi(registerCS, bitmaskCS);
-    resetRegion();
+    quickFill(color, x1, y, x2, y, false);
 }
 
 void Pixels::vLine(int16_t x, int16_t y1, int16_t y2) {
-    if ( x < 0 || x >= deviceWidth || y1 < 0 || y1 >= deviceHeight || y2 < 0 || y2 >= deviceHeight ) {
-        return;
-    }
-
-    if (y2 < y1) {
-        swap(y1, y2);
-    }
-
     int16_t color = foreground.convertTo565();
-    cbi(registerCS, bitmaskCS);
-    setRegion(x, y1, x, y2);
-    quickFill(color, y2 - y1 + 1);
-    sbi(registerCS, bitmaskCS);
-    resetRegion();
+    quickFill(color, x, y1, x, y2, false);
 }
 
 
@@ -1440,7 +1493,7 @@ void Pixels::deviceWriteData(uint8_t hi, uint8_t lo) {
 
 void Pixels::deviceWriteCmdData(uint8_t cmd, uint16_t data) {
      deviceWriteCmd(cmd);
-     deviceWriteData(data>>8, data);
+     deviceWriteData(highByte(data), lowByte(data));
 }
 
 void Pixels::init() {
@@ -1566,7 +1619,145 @@ void Pixels::setFillDirection(uint8_t direction) {
 //    }
 }
 
-void Pixels::quickFill(int color, int32_t counter) {
+void Pixels::quickFill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2, boolean valid) {
+
+    if (x2 < x1) {
+        swap(x1, x2);
+    }
+
+    if (y2 < y1) {
+        swap(y1, y2);
+    }
+
+    if (!valid) {
+        if ( x1 >= width ) {
+            return;
+        }
+
+        if ( y1 >= height ) {
+            return;
+        }
+
+        if ( x1 < 0 ) {
+            if ( x2 < 0 ) {
+                return;
+            }
+            x1 = 0;
+        }
+
+        if ( y1 < 0 ) {
+            if ( y2 < 0 ) {
+                return;
+            }
+            y1 = 0;
+        }
+
+        if ( relativeOrigin || currentScroll == 0 ) {
+            if ( currentScroll != 0 ) {
+                if ( landscape ) {
+                    int edge = currentScroll;
+                    if (x2 >= edge) {
+                        if ( x1 >= edge ) {
+                            return;
+                        } else  {
+                            x2 = edge - 1;
+                        }
+                    }
+                    if (y2 >= height) {
+                        y2 = height - 1;
+                    }
+                } else {
+                    int edge = currentScroll;
+                    if (y2 >= edge) {
+                        if ( y1 >= edge ) {
+                            return;
+                        } else  {
+                            y2 = edge - 1;
+                        }
+                    }
+                    if (x2 >= width) {
+                        x2 = width - 1;
+                    }
+                }
+            } else {
+                if (x2 >= width) {
+                    x2 = width - 1;
+                }
+                if (y2 >= height) {
+                    y2 = height - 1;
+                }
+            }
+        } else {
+            if ( x2 >= width ) {
+                x2 = width - 1;
+            }
+            if ( y2 >= height ) {
+                y2 = height - 1;
+            }
+
+            if ( currentScroll != 0 ) {
+                switch ( orientation ) {
+                case PORTRAIT:
+                case PORTRAIT_FLIP:
+                    y1 += currentScroll;
+                    y2 += currentScroll;
+                    y1 %= deviceHeight;
+                    y2 %= deviceHeight;
+                    if ( y1 > y2 ) {
+                        quickFill(color, x1, y1, x2, deviceHeight-1, true);
+                        quickFill(color, x1, 0, x2, y2, true);
+                    } else {
+                        quickFill(color, x1, y1, x2, y2, true);
+                    }
+                    break;
+                case LANDSCAPE:
+                case LANDSCAPE_FLIP:
+                    x1 += currentScroll;
+                    x2 += currentScroll;
+                    x1 %= deviceHeight;
+                    x2 %= deviceHeight;
+                    if ( x1 > x2 ) {
+                        quickFill(color, x1, y1, deviceHeight-1, y2, true);
+                        quickFill(color, 0, y1, x2, y2, true);
+                    } else {
+                        quickFill(color, x1, y1, x2, y2, true);
+                    }
+                    break;
+//                case PORTRAIT_FLIP:
+//                    y1 += currentScroll;
+//                    y2 += currentScroll;
+//                    y1 %= deviceHeight;
+//                    y2 %= deviceHeight;
+//                    if ( y1 > y2 ) {
+//                        quickFill(color, x1, y1, x2, deviceHeight-1, true);
+//                        quickFill(color, x1, 0, x2, y2, true);
+//                    } else {
+//                        quickFill(color, x1, deviceHeight-y1-1, x2, deviceHeight-y2-1, true);
+//                    }
+//                    break;
+//                case LANDSCAPE_FLIP:
+//                    x1 += currentScroll;
+//                    x2 += currentScroll;
+//                    x1 %= deviceHeight;
+//                    x2 %= deviceHeight;
+//                    if ( x1 > x2 ) {
+//                        quickFill(color, x1, y1, deviceHeight-1, y2, true);
+//                        quickFill(color, 0, y1, x2, y2, true);
+//                    } else {
+//                        quickFill(color, deviceHeight-x1-1, y1, deviceHeight-x2-1, y2, true);
+//                    }
+//                    break;
+                }
+                return;
+            }
+        }
+    }
+
+    cbi(registerCS, bitmaskCS);
+
+    setRegion(x1, y1, x2, y2);
+    int32_t counter = (int32_t)(x2 - x1 + 1) * (y2 - y1 + 1);
+
     sbi(registerRS, bitmaskRS);
 
     uint8_t lo = lowByte(color);
@@ -1626,17 +1817,44 @@ void Pixels::quickFill(int color, int32_t counter) {
             deviceWrite(hi, lo);
         }
     }
+    sbi(registerCS, bitmaskCS);
 }
 
 void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
-    if ( landscape ) {
-        int16_t buf = x1;
-        x1 = deviceHeight - y1;
-        y1 = buf;
-        buf = x2;
-        x2 = deviceHeight - y2;
-        y2 = buf;
+    if ( orientation != PORTRAIT ) {
+        int16_t buf;
+        switch( orientation ) {
+        case LANDSCAPE:
+            buf = x1;
+            x1 = deviceWidth - y1 - 1;
+            y1 = buf;
+            buf = x2;
+            x2 = deviceWidth - y2 - 1;
+            y2 = buf;
+            break;
+        case PORTRAIT_FLIP:
+            y1 = deviceHeight - y1 - 1;
+            y2 = deviceHeight - y2 - 1;
+            x1 = deviceWidth - x1 - 1;
+            x2 = deviceWidth - x2 - 1;
+            break;
+        case LANDSCAPE_FLIP:
+            buf = y1;
+            y1 = deviceHeight - x1 - 1;
+            x1 = buf;
+            buf = y2;
+            y2 = deviceHeight - x2 - 1;
+            x2 = buf;
+            break;
+        }
+
+        if (x2 < x1) {
+            swap(x1, x2);
+        }
+        if (y2 < y1) {
+            swap(y1, y2);
+        }
     }
 
     deviceWriteCmdData(0x20,x1);
@@ -1653,10 +1871,10 @@ void Pixels::resetRegion() {
 }
 
 void Pixels::setCurrentPixel(int16_t color) {
-    deviceWriteData((char)(color >> 8), (char)(color & 0xFF));
+    deviceWriteData(highByte(color), lowByte(color));
 }
 
 void Pixels::setCurrentPixel(RGB color) {
     int16_t c = color.convertTo565();
-    deviceWriteData((char)(c >> 8), (char)(c & 0xFF));
+    deviceWriteData(highByte(c), lowByte(c));
 }
