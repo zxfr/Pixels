@@ -150,14 +150,10 @@ boolean Pixels::canScroll() {
 /**  Graphic primitives */
 
 void Pixels::clear() {
-    if ( canScroll() ) {
-        scroll(deviceHeight, 0, deviceWidth, SCROLL_SMOOTH | SCROLL_CLEAN);
-    } else {
-        RGB sav = getColor();
-        setColor(background);
-        fillRectangle(0, 0, width, height);
-        setColor(sav);
-    }
+    RGB sav = getColor();
+    setColor(background);
+    fillRectangle(0, 0, width, height);
+    setColor(sav);
 }
 
 RGB Pixels::getPixel(int16_t x, int16_t y) {
@@ -1057,12 +1053,12 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                                         setColor(fg.red, fg.green, fg.blue);
                                     }
                                     while ( y + len > effHeight ) {
-                                        vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + effHeight);
+                                        vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + effHeight - 1);
                                         len -= effHeight - y;
                                         y = 0;
                                         x++;
                                     }
-                                    vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + y + len);
+                                    vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + y + len - 1);
                                 }
                             } else {
                                 if ( clean ) {
@@ -1096,12 +1092,12 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                                         setColor(fg.red, fg.green, fg.blue);
                                     }
                                     while ( x + len > effWidth ) {
-                                        hLine(x1 + marginLeft + x - 1, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
+                                        hLine(x1 + marginLeft + x, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
                                         len -= effWidth - x;
                                         x = 0;
                                         y++;
                                     }
-                                    hLine(x1 + marginLeft + x - 1, yy + marginTop + y, x1 + marginLeft + x + len - 1);
+                                    hLine(x1 + marginLeft + x, yy + marginTop + y, x1 + marginLeft + x + len - 1);
                                 }
                             } else {
                                 if ( clean ) {
@@ -1345,25 +1341,26 @@ void Pixels::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
 
     if (mdy > 1 && (flags & SCROLL_SMOOTH) > 0) {
 
-        int16_t easingLen = 8;
+        int16_t easingLen = 7;
         if ( mdy / 2 < easingLen) {
             easingLen = mdy / 2;
         }
 
-        int16_t dlx = (flags & SCROLL_CLEAN) > 0 ? 0 : 7;
+        int16_t dlx = (flags & SCROLL_CLEAN) > 0 ? 8 : 15;
+        int16_t factor = 3;
 
         int16_t step = dy < 0 ? -1 : 1;
         for ( int16_t i = 0; i < easingLen; i++ ) {
+            delay(dlx+(easingLen-i)*(easingLen-i)*factor/2);
             scroll(step, x1, x2, flags & SCROLL_CLEAN);
-            delay(dlx+(easingLen-i)*(easingLen-i)/2);
         }
         for ( int16_t i = 0; i < mdy - easingLen*2; i++ ) {
             scroll(step, x1, x2, flags & SCROLL_CLEAN);
-            delay(dlx);
+            delay(dlx+factor);
         }
         for ( int16_t i = 1; i <= easingLen; i++ ) {
             scroll(step, x1, x2, flags & SCROLL_CLEAN);
-            delay(dlx+i*i/2);
+            delay(dlx+i*i*factor/2);
         }
 
     } else {
