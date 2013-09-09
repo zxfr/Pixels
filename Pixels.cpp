@@ -42,6 +42,23 @@ uint16_t RGB::convertTo565() {
 
 
 Pixels::Pixels() {
+    deviceWidth = 240;
+    deviceHeight = 320;
+    this->width = 240;
+    this->height = 320;
+    orientation = PORTRAIT;
+
+    relativeOrigin = true;
+
+    currentScroll = 0;
+    scrollSupported = true;
+    scrollEnabled = true;
+
+    lineWidth = 1;
+    fillDirection = 0;
+
+    setBackground(0,0,0);
+    setColor(0xFF,0xFF,0xFF);
 }
 
 Pixels::Pixels(uint16_t width, uint16_t height) {
@@ -147,7 +164,7 @@ boolean Pixels::canScroll() {
 }
 
 
-/**  Graphic primitives */
+/*  Graphic primitives */
 
 void Pixels::clear() {
     RGB sav = getColor();
@@ -947,7 +964,7 @@ void Pixels::drawCircleAntialiaced( int16_t x, int16_t y, int16_t radius, boolea
     drawRoundRectangleAntialiased(x-radius, y-radius, radius*2, radius*2, radius, radius, bordermode);
 }
 
-/** TEXT */
+/* TEXT */
 
 
 int16_t Pixels::setFont(prog_uchar font[]) {
@@ -1064,12 +1081,10 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                                 if ( clean ) {
                                     setColor(background.red, background.green, background.blue);
 								} else {
-                                    int16_t opacity = (0xff & (b * 4));
-                                    int16_t sr = (fg.red * (255 - opacity) + background.red * (opacity))/255;
-                                    int16_t sg = (fg.green * (255 - opacity) + background.green * (opacity))/255;
-                                    int16_t sb = (fg.blue * (255 - opacity) + background.blue * (opacity))/255;
-                                    setColor(sr, sg, sb);
-								}
+                                    uint8_t opacity = (0xff & (b * 4));
+                                    RGB cl = computeColor(fg, opacity);
+                                    setColor(cl);
+                                }
                                 drawPixel(x1 + marginLeft + x, yy + marginTop + y);
                                 ctr++;
                             }
@@ -1103,12 +1118,10 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                                 if ( clean ) {
                                     setColor(background.red, background.green, background.blue);
 								} else {
-                                    int16_t opacity = (0xff & (b * 4));
-                                    int16_t sr = (fg.red * (255 - opacity) + background.red * (opacity))/255;
-                                    int16_t sg = (fg.green * (255 - opacity) + background.green * (opacity))/255;
-                                    int16_t sb = (fg.blue * (255 - opacity) + background.blue * (opacity))/255;
-                                    setColor(sr, sg, sb);
-	                            }
+                                    uint8_t opacity = (0xff & (b * 4));
+                                    RGB cl = computeColor(fg, opacity);
+                                    setColor(cl);
+                                }
                                 drawPixel(x1 + marginLeft + x, yy + marginTop + y);
                                 ctr++;
                             }
@@ -1289,7 +1302,7 @@ int16_t Pixels::getTextWidth(String text, int8_t kerning[]) {
 }
 
 
-/** Low level */
+/* Low level */
 
 void Pixels::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
     if ( x < 0 || x >= width || y < 0 || y >= height ) {
@@ -1317,6 +1330,7 @@ void Pixels::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
 RGB Pixels::computeColor(RGB bg, double alpha) {
     if ( alpha < 0 ) {
         alpha = 0;
+        return bg;
     }
     if ( alpha > 1 ) {
         alpha = 1;
@@ -1325,6 +1339,25 @@ RGB Pixels::computeColor(RGB bg, double alpha) {
     int16_t sg = (int)(bg.green * (1 - alpha) + foreground.green * alpha);
     int16_t sb = (int)(bg.blue * (1 - alpha) + foreground.blue * alpha);
     return RGB(sr, sg, sb);
+}
+
+RGB Pixels::computeColor(RGB fg, uint8_t opacity) {
+    int32_t sr = (int32_t)fg.red * (255 - opacity) + background.red * opacity;
+    int32_t sg = (int32_t)fg.green * (255 - opacity) + background.green * opacity;
+    int32_t sb = (int32_t)fg.blue * (255 - opacity) + background.blue * opacity;
+    sr /= 200;
+    sg /= 200;
+    sb /= 200;
+    if ( sr > 255 ) {
+        sr = 255;
+    }
+    if ( sg > 255 ) {
+        sg = 255;
+    }
+    if ( sb > 255 ) {
+        sb = 255;
+    }
+    return RGB((uint8_t)sr, (uint8_t)sg, (uint8_t)sb);
 }
 
 void Pixels::scroll(int16_t dy, int8_t flags) {
