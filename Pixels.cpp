@@ -256,15 +256,14 @@ void Pixels::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 }
 
 void Pixels::drawRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
-    drawLine(x, y, x+width-2, y);
-    drawLine(x+width-1, y, x+width-1, y+height-2);
-    drawLine(x+1, y+height-1, x+width-1, y+height-1);
-    drawLine(x, y+1, x, y+height-1);
+    hLine(x, y, x+width-2);
+    vLine(x+width-1, y, y+height-2);
+    hLine(x+1, y+height-1, x+width-1);
+    vLine(x, y+1, y+height-1);
 }
 
 void Pixels::fillRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
-    int16_t color = foreground.convertTo565();
-    quickFill(color, x, y, x+width-1, y+height-1, false);
+    fill(foreground.convertTo565(), x, y, x+width-1, y+height-1);
 }
 
 void Pixels::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
@@ -285,10 +284,10 @@ void Pixels::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x, y, width, height, radius, radius, 0);
     } else {
-        drawLine(x + radius, y + height, x + width - radius, y + height);
-        drawLine(x + radius, y, x + width - radius, y );
-        drawLine(x + width, y + radius, x + width, y + height - radius);
-        drawLine(x, y + radius, x, y + height - radius);
+        hLine(x + radius, y + height, x + width - radius);
+        hLine(x + radius, y, x + width - radius );
+        vLine(x + width, y + radius, y + height - radius);
+        vLine(x, y + radius, y + height - radius);
 
         int16_t shiftX = width - radius * 2;
         int16_t shiftY = height - radius * 2;
@@ -345,7 +344,7 @@ void Pixels::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
         } else {
             corr = 0;
         }
-        drawLine( x + corr, y+j, x+width-corr, y+j );
+        hLine( x + corr, y+j, x+width-corr );
     }
 
     int16_t shiftX = width - radius * 2;
@@ -369,15 +368,15 @@ void Pixels::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
         ddF_x += 2;
         f += ddF_x;
 
-        drawLine(xx + shiftX, yy - y1, xx + shiftX + x1, yy - y1);
-        drawLine(xx - x1, yy - y1, xx, yy - y1);
-        drawLine(xx + shiftX, yy - x1, xx + shiftX + y1, yy - x1);
-        drawLine(xx - y1, yy - x1, xx, yy - x1);
+        hLine(xx + shiftX, yy - y1, xx + shiftX + x1);
+        hLine(xx - x1, yy - y1, xx);
+        hLine(xx + shiftX, yy - x1, xx + shiftX + y1);
+        hLine(xx - y1, yy - x1, xx);
 
-        drawLine(xx + shiftX, yy + y1 + shiftY,  xx + x1 + shiftX, yy + y1 + shiftY);
-        drawLine(xx + shiftX, yy + x1 + shiftY, xx + shiftX + y1, yy + x1 + shiftY);
-        drawLine(xx - x1, yy + y1 + shiftY, xx, yy + y1 + shiftY);
-        drawLine(xx - y1, yy + x1 + shiftY, xx, yy + x1 + shiftY);
+        vLine(xx + shiftX, yy + y1 + shiftY,  xx + x1 + shiftX);
+        vLine(xx + shiftX, yy + x1 + shiftY, xx + shiftX + y1);
+        vLine(xx - x1, yy + y1 + shiftY, xx);
+        vLine(xx - y1, yy + x1 + shiftY, xx);
     }
 
     if ( antialiasing ) {
@@ -463,11 +462,11 @@ void Pixels::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
         }
 
         if (width == 1) {
-            drawLine(xx, yy, xx, yy + height);
+            vLine(xx, yy, yy + height);
             return;
         }
         if (height == 1) {
-            drawLine(xx, yy, xx + width, yy);
+            hLine(xx, yy, xx + width);
             return;
         }
 
@@ -588,12 +587,12 @@ void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
     }
 
     if (rx == 0) {
-        drawLine(x, y - ry, x, y + ry);
+        vLine(x, y - ry, y + ry);
         return;
     }
 
     if (ry == 0) {
-        drawLine(x - rx, y, x + rx, y);
+        hLine(x - rx, y, x + rx);
         return;
     }
 
@@ -613,10 +612,10 @@ void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
                 xph = x + h;
                 xmh = x - h;
                 if (k > 0) {
-                    drawLine(xmh, y + k, xph, y + k);
-                    drawLine(xmh, y - k, xph, y - k);
+                    hLine(xmh, y + k, xph);
+                    hLine(xmh, y - k, xph);
                 } else {
-                    drawLine(xmh, y, xph, y);
+                    hLine(xmh, y, xph);
                 }
                 ok = k;
             }
@@ -624,10 +623,10 @@ void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
                 xmi = x - i;
                 xpi = x + i;
                 if (j > 0) {
-                    drawLine(xmi, y + j, xpi, y + j);
-                    drawLine(xmi, y - j, xpi, y - j);
+                    hLine(xmi, y + j, xpi);
+                    hLine(xmi, y - j, xpi);
                 } else {
-                    drawLine(xmi, y, xpi, y);
+                    hLine(xmi, y, xpi);
                 }
                 oj = j;
             }
@@ -650,10 +649,10 @@ void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
                 xmj = x - j;
                 xpj = x + j;
                 if (i > 0) {
-                    drawLine(xmj, y + i, xpj, y + i);
-                    drawLine(xmj, y - i, xpj, y - i);
+                    hLine(xmj, y + i, xpj);
+                    hLine(xmj, y - i, xpj);
                 } else {
-                    drawLine(xmj, y, xpj, y);
+                    hLine(xmj, y, xpj);
                 }
                 oi = i;
             }
@@ -661,10 +660,10 @@ void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
                 xmk = x - k;
                 xpk = x + k;
                 if (h > 0) {
-                    drawLine(xmk, y + h, xpk, y + h);
-                    drawLine(xmk, y - h, xpk, y - h);
+                    hLine(xmk, y + h, xpk);
+                    hLine(xmk, y - h, xpk);
                 } else {
-                    drawLine(xmk, y, xpk, y);
+                    hLine(xmk, y, xpk);
                 }
                 oh = h;
             }
@@ -809,12 +808,12 @@ void Pixels::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, 
     }
 
     if (rx == 0) {
-        drawLine(x, y - ry, x, y + ry);
+        vLine(x, y - ry, y + ry);
         return;
     }
 
     if (ry == 0) {
-        drawLine(x - rx, y, x + rx, y);
+        hLine(x - rx, y, x + rx);
         return;
     }
 
@@ -838,10 +837,10 @@ void Pixels::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, 
     xp = x + rx;
     yp = y;
 
-    drawLine(x + rx, y + height, x + width - rx, y + height);
-    drawLine(x + rx, y, x + width - rx, y );
-    drawLine(x + width, y + ry, x + width, y + height - ry);
-    drawLine(x, y + ry, x, y + height - ry);
+    hLine(x + rx, y + height, x + width - rx);
+    hLine(x + rx, y, x + width - rx );
+    vLine(x + width, y + ry, y + height - ry);
+    vLine(x, y + ry, y + height - ry);
 
     for (i = 1; i <= dxt; i++) {
         xp--;
@@ -989,11 +988,11 @@ int16_t Pixels::setFont(prog_uchar font[]) {
 }
 
 void Pixels::print(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
-	printString(xx, yy, text, 0, kerning);
+    printString(xx, yy, text, 0, kerning);
 }
 
 void Pixels::cleanText(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
-	printString(xx, yy, text, 1, kerning);
+    printString(xx, yy, text, 1, kerning);
 }
 
 void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[]) {
@@ -1080,7 +1079,7 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                             } else {
                                 if ( clean ) {
                                     setColor(background.red, background.green, background.blue);
-								} else {
+                                } else {
                                     uint8_t opacity = (0xff & (b * 4));
                                     RGB cl = computeColor(fg, opacity);
                                     setColor(cl);
@@ -1103,7 +1102,7 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                                 if ( (0x80 & b) > 0 ) {
                                     if ( clean ) {
                                         setColor(background.red, background.green, background.blue);
-									} else {
+                                    } else {
                                         setColor(fg.red, fg.green, fg.blue);
                                     }
                                     while ( x + len > effWidth ) {
@@ -1117,7 +1116,7 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                             } else {
                                 if ( clean ) {
                                     setColor(background.red, background.green, background.blue);
-								} else {
+                                } else {
                                     uint8_t opacity = (0xff & (b * 4));
                                     RGB cl = computeColor(fg, opacity);
                                     setColor(cl);
@@ -1134,7 +1133,7 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                         setColor(background.red, background.green, background.blue);
 //					} else {
 //                        setColor(fg.red, fg.green, fg.blue );
-					}
+                    }
 
                     boolean compressed = (pgm_read_byte_near(currentFont + ptr + 7) & 0x80) > 0;
                     if ( compressed ) {
@@ -1184,7 +1183,7 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
                             int16_t b = 0xff & pgm_read_byte_near(currentFont + ptr + 8 + i);
                             int16_t x = i * 8 % effWidth;
                             int16_t y = i * 8 / effWidth;
-                            for ( int16_t j = 0; j < 8; j++ ) {
+                            for ( uint8_t j = 0; j < 8; j++ ) {
                                 if ( x + j == effWidth ) {
                                     x = -j;
                                     y++;
@@ -1275,7 +1274,7 @@ int16_t Pixels::getTextWidth(String text, int8_t kerning[]) {
 //						Serial.println( " glyph definition. Font corrupted?" );
                     break;
                 }
-                Serial.print( c );
+//                Serial.print( c );
                 found = true;
                 width = 0xff & pgm_read_byte_near(currentFont + ptr + 4);
             }
@@ -1411,10 +1410,7 @@ void Pixels::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
         currentScroll %= deviceHeight;
         flipScroll = (deviceHeight - currentScroll) % deviceHeight;
 
-        cbi(registerCS, bitmaskCS);
-        deviceWriteCmd(0x6A);
-        deviceWriteData(highByte(currentScroll), lowByte(currentScroll));
-        sbi(registerCS, bitmaskCS);
+        scrollCmd();
 
         if ( (flags & SCROLL_CLEAN) > 0 ) {
 
@@ -1494,162 +1490,13 @@ void Pixels::drawPixel(int16_t x, int16_t y) {
         }
     }
 
-    cbi(registerCS, bitmaskCS);
+    CSELECT;
     setRegion(x, y, x, y);
     setCurrentPixel(foreground);
-    sbi(registerCS, bitmaskCS);
+    CDESELECT;
 }
 
-void Pixels::hLine(int16_t x1, int16_t y, int16_t x2) {
-    int16_t color = foreground.convertTo565();
-    quickFill(color, x1, y, x2, y, false);
-}
-
-void Pixels::vLine(int16_t x, int16_t y1, int16_t y2) {
-    int16_t color = foreground.convertTo565();
-    quickFill(color, x, y1, x, y2, false);
-}
-
-
-void Pixels::deviceWriteCmd(uint8_t b) {
-    cbi(registerRS, bitmaskRS);
-    deviceWrite(0x00, b);
-}
-
-void Pixels::deviceWriteData(uint8_t hi, uint8_t lo) {
-    sbi(registerRS, bitmaskRS);
-    deviceWrite(hi, lo);
-}
-
-void Pixels::deviceWriteCmdData(uint8_t cmd, uint16_t data) {
-     deviceWriteCmd(cmd);
-     deviceWriteData(highByte(data), lowByte(data));
-}
-
-void Pixels::init() {
-
-    int16_t pinRS = 38;
-    int16_t pinWR = 39;
-    int16_t pinCS = 40;
-    int16_t pinRST = 41;
-    int16_t pinRD = -1;
-
-    DDRA = 0xFF;
-
-    registerRS	= portOutputRegister(digitalPinToPort(pinRS));
-    registerWR	= portOutputRegister(digitalPinToPort(pinWR));
-    registerCS	= portOutputRegister(digitalPinToPort(pinCS));
-    registerRST	= portOutputRegister(digitalPinToPort(pinRST));
-    if ( pinRD > 0 ) {
-        registerRD	= portOutputRegister(digitalPinToPort(pinRD));
-    }
-
-    bitmaskRS	= digitalPinToBitMask(pinRS);
-    bitmaskWR	= digitalPinToBitMask(pinWR);
-    bitmaskCS	= digitalPinToBitMask(pinCS);
-    bitmaskRST	= digitalPinToBitMask(pinRST);
-    if ( pinRD > 0 ) {
-        bitmaskRD	= digitalPinToBitMask(pinRD);
-    }
-
-    pinMode(pinRS,OUTPUT);
-    pinMode(pinWR,OUTPUT);
-    pinMode(pinCS,OUTPUT);
-    pinMode(pinRST,OUTPUT);
-
-    sbi(registerRST, bitmaskRST);
-    delay(5);
-    cbi(registerRST, bitmaskRST);
-    delay(15);
-    sbi(registerRST, bitmaskRST);
-    delay(15);
-
-    cbi(registerCS, bitmaskCS);
-
-    deviceWriteCmdData(0xE5, 0x78F0);
-    deviceWriteCmdData(0x01, 0x0100);
-    deviceWriteCmdData(0x02, 0x0700); // line inversion
-    deviceWriteCmdData(0x03, 0x1030); // write direction; alternatively 1038
-    deviceWriteCmdData(0x04, 0x0000);
-    deviceWriteCmdData(0x08, 0x0302);
-    deviceWriteCmdData(0x09, 0x0000);
-    deviceWriteCmdData(0x0A, 0x0000);
-
-    deviceWriteCmdData(0x0C, 0x0000);
-    deviceWriteCmdData(0x0D, 0x0000);
-    deviceWriteCmdData(0x0F, 0x0000);
-
-    // Power control
-    deviceWriteCmdData(0x10, 0x0000);
-    deviceWriteCmdData(0x11, 0x0007);
-    deviceWriteCmdData(0x12, 0x0000);
-    deviceWriteCmdData(0x13, 0x0000);
-    deviceWriteCmdData(0x07, 0x0001);
-    delay(220);
-    deviceWriteCmdData(0x10, 0x1090);
-    deviceWriteCmdData(0x11, 0x0227);
-    delay(60);
-    deviceWriteCmdData(0x12, 0x001F);
-    delay(60);
-    deviceWriteCmdData(0x13, 0x1500);
-
-//  Power control alternative
-//    deviceWriteCmdData(0x0010, 0x0000);
-//    deviceWriteCmdData(0x0011, 0x0007);
-//    deviceWriteCmdData(0x0012, 0x0000);
-//    deviceWriteCmdData(0x0013, 0x0000);
-//    delay(1000);
-//    deviceWriteCmdData(0x0010, 0x14B0);
-//    delay(500);
-//    deviceWriteCmdData(0x0011, 0x0007);
-//    delay(500);
-//    deviceWriteCmdData(0x0012, 0x008E);
-//    deviceWriteCmdData(0x0013, 0x0C00);
-
-    deviceWriteCmdData(0x29, 0x0027); // 0x0015 ?
-    deviceWriteCmdData(0x2B, 0x000D); // Frame rate
-    delay(50);
-
-    // Gamma tuning
-    deviceWriteCmdData(0x0030, 0x0000);
-    deviceWriteCmdData(0x0031, 0x0107);
-    deviceWriteCmdData(0x0032, 0x0000);
-    deviceWriteCmdData(0x0035, 0x0203);
-    deviceWriteCmdData(0x0036, 0x0402);
-    deviceWriteCmdData(0x0037, 0x0000);
-    deviceWriteCmdData(0x0038, 0x0207);
-    deviceWriteCmdData(0x0039, 0x0000);
-    deviceWriteCmdData(0x003C, 0x0203);
-    deviceWriteCmdData(0x003D, 0x0403);
-
-    deviceWriteCmdData(0x20, 0x0000); // GRAM horizontal Address
-    deviceWriteCmdData(0x21, 0x0000); // GRAM Vertical Address
-
-    deviceWriteCmdData(0x50, 0x0000); // Window Horizontal RAM Address Start (R50h)
-    deviceWriteCmdData(0x51, 0x00EF); // Window Horizontal RAM Address End (R51h)
-    deviceWriteCmdData(0x52, 0x0000); // Window Vertical RAM Address Start (R52h)
-    deviceWriteCmdData(0x53, 0x013F); // Window Vertical RAM Address End (R53h)
-    deviceWriteCmdData(0x60, 0xA700); // Driver Output Control (R60h) - Gate Scan Line
-    deviceWriteCmdData(0x61, 0x0003); // Driver Output Control (R61h) - enable VLE
-//    deviceWriteCmdData(0x6A, 0x0000); // set initial scrolling
-
-    deviceWriteCmdData(0x90, 0x0010); // Panel Interface Control 1 (R90h)
-    deviceWriteCmdData(0x92, 0x0600);
-    deviceWriteCmdData(0x07, 0x0133); // RGB565 color
-
-    sbi (registerCS, bitmaskCS);
-}
-
-void Pixels::setFillDirection(uint8_t direction) {
-    fillDirection = direction;
-//    if ( order ) {
-//        deviceWriteCmdData(0x03, 0x1030);
-//    } else {
-//        deviceWriteCmdData(0x03, 0x1030);
-//    }
-}
-
-void Pixels::quickFill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2, boolean valid) {
+void Pixels::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
     if (x2 < x1) {
         swap(x1, x2);
@@ -1659,241 +1506,113 @@ void Pixels::quickFill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2
         swap(y1, y2);
     }
 
-    if (!valid) {
-        if ( x1 >= width ) {
+    if ( x1 >= width ) {
+        return;
+    }
+
+    if ( y1 >= height ) {
+        return;
+    }
+
+    if ( x1 < 0 ) {
+        if ( x2 < 0 ) {
             return;
         }
+        x1 = 0;
+    }
 
-        if ( y1 >= height ) {
+    if ( y1 < 0 ) {
+        if ( y2 < 0 ) {
             return;
         }
+        y1 = 0;
+    }
 
-        if ( x1 < 0 ) {
-            if ( x2 < 0 ) {
-                return;
-            }
-            x1 = 0;
-        }
-
-        if ( y1 < 0 ) {
-            if ( y2 < 0 ) {
-                return;
-            }
-            y1 = 0;
-        }
-
-        if ( relativeOrigin || currentScroll == 0 ) {
-            if ( currentScroll != 0 ) {
-                if ( landscape ) {
-                    int edge = currentScroll;
-                    if (x2 >= edge) {
-                        if ( x1 >= edge ) {
-                            return;
-                        } else  {
-                            x2 = edge - 1;
-                        }
+    if ( relativeOrigin || currentScroll == 0 ) {
+        if ( currentScroll != 0 ) {
+            if ( landscape ) {
+                int edge = currentScroll;
+                if (x2 >= edge) {
+                    if ( x1 >= edge ) {
+                        return;
+                    } else  {
+                        x2 = edge - 1;
                     }
-                    if (y2 >= height) {
-                        y2 = height - 1;
-                    }
-                } else {
-                    int edge = currentScroll;
-                    if (y2 >= edge) {
-                        if ( y1 >= edge ) {
-                            return;
-                        } else  {
-                            y2 = edge - 1;
-                        }
-                    }
-                    if (x2 >= width) {
-                        x2 = width - 1;
-                    }
-                }
-            } else {
-                if (x2 >= width) {
-                    x2 = width - 1;
                 }
                 if (y2 >= height) {
                     y2 = height - 1;
                 }
+            } else {
+                int edge = currentScroll;
+                if (y2 >= edge) {
+                    if ( y1 >= edge ) {
+                        return;
+                    } else  {
+                        y2 = edge - 1;
+                    }
+                }
+                if (x2 >= width) {
+                    x2 = width - 1;
+                }
             }
         } else {
-            if ( x2 >= width ) {
+            if (x2 >= width) {
                 x2 = width - 1;
             }
-            if ( y2 >= height ) {
+            if (y2 >= height) {
                 y2 = height - 1;
             }
-
-            if ( currentScroll != 0 ) {
-                switch ( orientation ) {
-                case PORTRAIT:
-                case PORTRAIT_FLIP:
-                    y1 += currentScroll;
-                    y2 += currentScroll;
-                    y1 %= deviceHeight;
-                    y2 %= deviceHeight;
-                    if ( y1 > y2 ) {
-                        quickFill(color, x1, y1, x2, deviceHeight-1, true);
-                        quickFill(color, x1, 0, x2, y2, true);
-                    } else {
-                        quickFill(color, x1, y1, x2, y2, true);
-                    }
-                    break;
-                case LANDSCAPE:
-                case LANDSCAPE_FLIP:
-                    x1 += currentScroll;
-                    x2 += currentScroll;
-                    x1 %= deviceHeight;
-                    x2 %= deviceHeight;
-                    if ( x1 > x2 ) {
-                        quickFill(color, x1, y1, deviceHeight-1, y2, true);
-                        quickFill(color, 0, y1, x2, y2, true);
-                    } else {
-                        quickFill(color, x1, y1, x2, y2, true);
-                    }
-                    break;
-//                case PORTRAIT_FLIP:
-//                    y1 += currentScroll;
-//                    y2 += currentScroll;
-//                    y1 %= deviceHeight;
-//                    y2 %= deviceHeight;
-//                    if ( y1 > y2 ) {
-//                        quickFill(color, x1, y1, x2, deviceHeight-1, true);
-//                        quickFill(color, x1, 0, x2, y2, true);
-//                    } else {
-//                        quickFill(color, x1, deviceHeight-y1-1, x2, deviceHeight-y2-1, true);
-//                    }
-//                    break;
-//                case LANDSCAPE_FLIP:
-//                    x1 += currentScroll;
-//                    x2 += currentScroll;
-//                    x1 %= deviceHeight;
-//                    x2 %= deviceHeight;
-//                    if ( x1 > x2 ) {
-//                        quickFill(color, x1, y1, deviceHeight-1, y2, true);
-//                        quickFill(color, 0, y1, x2, y2, true);
-//                    } else {
-//                        quickFill(color, deviceHeight-x1-1, y1, deviceHeight-x2-1, y2, true);
-//                    }
-//                    break;
-                }
-                return;
-            }
-        }
-    }
-
-    cbi(registerCS, bitmaskCS);
-
-    setRegion(x1, y1, x2, y2);
-    int32_t counter = (int32_t)(x2 - x1 + 1) * (y2 - y1 + 1);
-
-    sbi(registerRS, bitmaskRS);
-
-    uint8_t lo = lowByte(color);
-    uint8_t hi = highByte(color);
-
-    if ( lo == hi ) {
-        PORTA = color;
-        for (int16_t i = 0; i < counter / 20; i++) {
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-            deviceWriteTwice(lo);
-        }
-        for (int32_t i = 0; i < counter % 20; i++) {
-            deviceWriteTwice(lo);
         }
     } else {
-        for (int16_t i = 0; i < counter / 20; i++) {
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
-            deviceWrite(hi, lo);
+        if ( x2 >= width ) {
+            x2 = width - 1;
         }
-        for (int32_t i = 0; i < counter % 20; i++) {
-            deviceWrite(hi, lo);
+        if ( y2 >= height ) {
+            y2 = height - 1;
+        }
+
+        if ( currentScroll != 0 ) {
+            switch ( orientation ) {
+            case PORTRAIT:
+            case PORTRAIT_FLIP:
+                y1 += currentScroll;
+                y2 += currentScroll;
+                y1 %= deviceHeight;
+                y2 %= deviceHeight;
+                if ( y1 > y2 ) {
+                    quickFill(color, x1, y1, x2, deviceHeight-1);
+                    quickFill(color, x1, 0, x2, y2);
+                } else {
+                    quickFill(color, x1, y1, x2, y2);
+                }
+                break;
+            case LANDSCAPE:
+            case LANDSCAPE_FLIP:
+                x1 += currentScroll;
+                x2 += currentScroll;
+                x1 %= deviceHeight;
+                x2 %= deviceHeight;
+                if ( x1 > x2 ) {
+                    quickFill(color, x1, y1, deviceHeight-1, y2);
+                    quickFill(color, 0, y1, x2, y2);
+                } else {
+                    quickFill(color, x1, y1, x2, y2);
+                }
+                break;
+            }
+            return;
         }
     }
-    sbi(registerCS, bitmaskCS);
+
+    quickFill(color, x1, y1, x2, y2);
 }
 
-void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void Pixels::hLine(int16_t x1, int16_t y, int16_t x2) {
+    fill(foreground.convertTo565(), x1, y, x2, y);
+}
 
-    if ( orientation != PORTRAIT ) {
-        int16_t buf;
-        switch( orientation ) {
-        case LANDSCAPE:
-            buf = x1;
-            x1 = deviceWidth - y1 - 1;
-            y1 = buf;
-            buf = x2;
-            x2 = deviceWidth - y2 - 1;
-            y2 = buf;
-            break;
-        case PORTRAIT_FLIP:
-            y1 = deviceHeight - y1 - 1;
-            y2 = deviceHeight - y2 - 1;
-            x1 = deviceWidth - x1 - 1;
-            x2 = deviceWidth - x2 - 1;
-            break;
-        case LANDSCAPE_FLIP:
-            buf = y1;
-            y1 = deviceHeight - x1 - 1;
-            x1 = buf;
-            buf = y2;
-            y2 = deviceHeight - x2 - 1;
-            x2 = buf;
-            break;
-        }
-
-        if (x2 < x1) {
-            swap(x1, x2);
-        }
-        if (y2 < y1) {
-            swap(y1, y2);
-        }
-    }
-
-    deviceWriteCmdData(0x20,x1);
-    deviceWriteCmdData(0x21,y1);
-    deviceWriteCmdData(0x50,x1);
-    deviceWriteCmdData(0x52,y1);
-    deviceWriteCmdData(0x51,x2);
-    deviceWriteCmdData(0x53,y2);
-    deviceWriteCmd(0x22);
+void Pixels::vLine(int16_t x, int16_t y1, int16_t y2) {
+    fill(foreground.convertTo565(), x, y1, x, y2);
 }
 
 void Pixels::resetRegion() {

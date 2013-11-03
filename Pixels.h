@@ -63,13 +63,14 @@
 
 #define swap(a, b) {int16_t buf = a; a = b; b = buf;}
 
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
 #define deviceWrite(hi, lo) PORTA = hi; pulse_low(registerWR, bitmaskWR); PORTA = lo; pulse_low(registerWR, bitmaskWR)
 #define deviceWriteTwice(b) PORTA = b; pulse_low(registerWR, bitmaskWR); pulse_low(registerWR, bitmaskWR)
+#else
+#define deviceWrite(hi, lo) PORTD = hi; pulse_low(registerWR, bitmaskWR); PORTD = lo; pulse_low(registerWR, bitmaskWR)
+#define deviceWriteTwice(b) PORTD = b; pulse_low(registerWR, bitmaskWR); pulse_low(registerWR, bitmaskWR)
+#endif
 
-
-
-
-// #include <UTFT.h>
 
 #define BITMASK_FONT 1
 #define ANTIALIASED_FONT 2
@@ -96,6 +97,8 @@
 #define fpart(X) (((double)(X))-(double)ipart(X))
 #define rfpart(X) (1.0-fpart(X))
 
+#define CSELECT cbi(registerCS, bitmaskCS)
+#define CDESELECT sbi(registerCS, bitmaskCS)
 
 class RGB {
 public:
@@ -113,7 +116,7 @@ public:
 
 
 class Pixels {
-private:
+protected:
     /* device physical dimension in portrait orientation */
     uint16_t deviceWidth;
     uint16_t deviceHeight;
@@ -146,24 +149,16 @@ private:
     int16_t flipScroll;
     boolean scrollCleanMode;
 
-    regtype *registerRS; // register select
     regtype *registerCS; // chip select
-    regtype *registerWR; // write strobe
-    regtype *registerRD; // read strobe
-    regtype *registerRST; // reset
-
-    regsize bitmaskRS;
     regsize bitmaskCS;
-    regsize bitmaskWR;
-    regsize bitmaskRD;
-    regsize bitmaskRST;
 
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
 
-    void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
+    virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
     void setCurrentPixel(RGB color);
     void setCurrentPixel(int16_t color);
-    void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2, boolean valid);
+    void fill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2);
+    virtual void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
     void putColor(int16_t x, int16_t y, boolean steep, double weight);
     RGB computeColor(RGB, double weight);
     RGB computeColor(RGB fg, uint8_t opacity);
@@ -173,9 +168,11 @@ private:
     void hLine(int16_t x1, int16_t y1, int16_t x2);
     void vLine(int16_t x1, int16_t y1, int16_t y2);
 
-    void deviceWriteCmd(uint8_t b);
-    void deviceWriteData(uint8_t hi, uint8_t lo);
-    void deviceWriteCmdData(uint8_t cmd, uint16_t data);
+    void deviceWriteCmd(uint8_t b) {};
+    virtual void deviceWriteData(uint8_t hi, uint8_t lo) {};
+    void deviceWriteCmdData(uint8_t cmd, uint16_t data) {};
+
+    virtual void scrollCmd() {};
 
     void drawCircleAntialiaced(int16_t x, int16_t y, int16_t radius, boolean bordermode);
     void drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -201,7 +198,7 @@ public:
     /**
      * Initializes hardware with defaults.
      */
-    void init();
+    virtual void init() {};
     /**
      * Sets the current coordinate space orientation.
      * Default value depends on initially given device width and height (PORTRAIT if height > width, otherwise LANDSCAPE).
@@ -267,7 +264,7 @@ public:
      * Outout fine tuning method for slow devices
      * @param direction accepts FILL_TOPDOWN, FILL_LEFTRIGHT, FILL_DOWNTOP or FILL_RIGHTLEFT
      */
-    void setFillDirection(uint8_t direction);
+    virtual void setFillDirection(uint8_t direction) {};
     /**
      * Fills the screen with the current background color
      */
