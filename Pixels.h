@@ -27,6 +27,8 @@
 #ifndef PIXELS_H
 #define PIXELS_H
 
+// #define DISABLE_ANTIALIASING 1
+
 #if defined(__AVR__)
     #include <Arduino.h>
 
@@ -174,12 +176,14 @@ protected:
 
     virtual void scrollCmd() {};
 
+#ifndef DISABLE_ANTIALIASING
     void drawCircleAntialiaced(int16_t x, int16_t y, int16_t radius, boolean bordermode);
     void drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     void drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     void drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, int16_t height, int16_t rx, int16_t ry, boolean bordermode);
 
     int16_t* loadFileBytes(String);
+#endif
 
 public:
     /**

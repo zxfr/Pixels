@@ -136,7 +136,11 @@ uint8_t Pixels::getOrientation() {
 }
 
 void Pixels::enableAntialiasing(boolean enable){
+#ifndef DISABLE_ANTIALIASING
     antialiasing = enable;
+#else
+    antialiasing = false;
+#endif
 }
 
 boolean Pixels::isAntialiased(){
@@ -190,24 +194,17 @@ double Pixels::getLineWidth() {
 
 void Pixels::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
-//    if ( landscape ) {
-//        int16_t buf = x1;
-//        x1 = y1;
-//        y1 = buf;
-//        buf = x2;
-//        x2 = y2;
-//        y2 = buf;
-//    }
-
     if (y1 == y2 && lineWidth == 1) {
         hLine(x1, y1, x2);
     } else if (x1 == x2 && lineWidth == 1) {
         vLine(x1, y1, y2);
     } else {
+#ifndef DISABLE_ANTIALIASING
         if ( lineWidth == 1 ) {
             if ( antialiasing ) {
                 drawLineAntialiased(x1, y1, x2, y2);
             } else {
+#endif
                 int16_t dx;
                 int16_t dy;
                 int16_t sx;
@@ -248,10 +245,12 @@ void Pixels::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
                         y = y + sy;
                     }
                 }
+#ifndef DISABLE_ANTIALIASING
             }
         } else {
             drawFatLineAntialiased(x1, y1, x2, y2);
         }
+#endif
     }
 }
 
@@ -281,9 +280,11 @@ void Pixels::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
         radius = width/2;
     }
 
+#ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x, y, width, height, radius, radius, 0);
     } else {
+#endif
         hLine(x + radius, y + height, x + width - radius);
         hLine(x + radius, y, x + width - radius );
         vLine(x + width, y + radius, y + height - radius);
@@ -319,7 +320,9 @@ void Pixels::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
             drawPixel(xx + y1 + shiftX, yy - x1);
             drawPixel(xx - y1, yy - x1);
         }
+#ifndef DISABLE_ANTIALIASING
     }
+#endif
 }
 
 void Pixels::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
@@ -379,16 +382,20 @@ void Pixels::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
         vLine(xx - y1, yy + x1 + shiftY, xx);
     }
 
+#ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x, y, width, height, radius, radius, true);
     }
+#endif
 }
 
 void Pixels::drawCircle(int16_t x, int16_t y, int16_t r) {
 
+#ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
         drawCircleAntialiaced(x, y, r, false);
     } else {
+#endif
         int16_t f = 1 - r;
         int16_t ddF_x = 1;
         int16_t ddF_y = -2 * r;
@@ -418,7 +425,9 @@ void Pixels::drawCircle(int16_t x, int16_t y, int16_t r) {
             drawPixel(x + y1, y - x1);
             drawPixel(x - y1, y - x1);
         }
+#ifndef DISABLE_ANTIALIASING
     }
+#endif
 }
 
 void Pixels::fillCircle(int16_t x, int16_t y, int16_t r) {
@@ -433,16 +442,20 @@ void Pixels::fillCircle(int16_t x, int16_t y, int16_t r) {
         }
     }
 
+#ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
         drawCircleAntialiaced(x, y, r, true);
     }
+#endif
 }
 
 void Pixels::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
 
+#ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x, y, width, height, width/2, height/2, 0);
     } else {
+#endif
         int16_t ix, iy;
         int16_t h, i, j, k;
         int16_t oh, oi, oj, ok;
@@ -563,7 +576,9 @@ void Pixels::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
 
             } while (i > h);
         }
+#ifndef DISABLE_ANTIALIASING
     }
+#endif
 }
 
 void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
@@ -674,9 +689,11 @@ void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
         } while (i > h);
     }
 
+#ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x-rx, y-ry, rx*2, ry*2, rx, ry, true);
     }
+#endif
 }
 
 int8_t Pixels::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, int16_t* data) {
@@ -697,6 +714,8 @@ int8_t Pixels::loadBitmap(int16_t x, int16_t y, int16_t sx, int16_t sy, String p
 }
 
 /*  -------   Antialiasing ------- */
+
+#ifndef DISABLE_ANTIALIASING
 
 void Pixels::drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
@@ -962,6 +981,8 @@ void Pixels::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, 
 void Pixels::drawCircleAntialiaced( int16_t x, int16_t y, int16_t radius, boolean bordermode )	{
     drawRoundRectangleAntialiased(x-radius, y-radius, radius*2, radius*2, radius, radius, bordermode);
 }
+
+#endif
 
 /* TEXT */
 
@@ -1373,7 +1394,7 @@ void Pixels::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
 
     if (mdy > 1 && (flags & SCROLL_SMOOTH) > 0) {
 
-        int16_t easingLen = 7;
+        int16_t easingLen = 5;
         if ( mdy / 2 < easingLen) {
             easingLen = mdy / 2;
         }
