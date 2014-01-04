@@ -41,7 +41,7 @@ uint16_t RGB::convertTo565() {
 }
 
 
-Pixels::Pixels() {
+Pixels::Pixels(uint8_t chipSelectPort) {
     deviceWidth = 240;
     deviceHeight = 320;
     this->width = 240;
@@ -59,9 +59,12 @@ Pixels::Pixels() {
 
     setBackground(0,0,0);
     setColor(0xFF,0xFF,0xFF);
+
+    registerCS	= portOutputRegister(digitalPinToPort(chipSelectPort));
+    bitmaskCS	= digitalPinToBitMask(chipSelectPort);
 }
 
-Pixels::Pixels(uint16_t width, uint16_t height) {
+Pixels::Pixels(uint16_t width, uint16_t height, uint8_t chipSelectPort) {
     deviceWidth = width < height ? width : height;
     deviceHeight = width > height ? width : height;
     this->width = width;
@@ -79,6 +82,9 @@ Pixels::Pixels(uint16_t width, uint16_t height) {
 
     setBackground(0,0,0);
     setColor(0xFF,0xFF,0xFF);
+
+    registerCS	= portOutputRegister(digitalPinToPort(chipSelectPort));
+    bitmaskCS	= digitalPinToBitMask(chipSelectPort);
 }
 
 void Pixels::setColor(uint8_t r, uint8_t g, uint8_t b) {

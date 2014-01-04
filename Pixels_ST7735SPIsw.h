@@ -15,16 +15,18 @@
  */
 
 /*
- * Pixels port to HX8340-B controller, hardware SPI mode, ITDB02-2.2SP
+ * Pixels port to ILI9341 controller, SPI mode (ElecFreaks TFT2.2SP Shield)
+ * SPI is in bit banging mode, as the shield does not connect the hardware SPI (SCL=13, SDA=11)
+ * to the display controller
  */
 
 #include "Pixels.h"
-#include "SPIhw.h"
+#include "SPIsw.h"
 
-#ifndef PIXELS_HX8340SPI_H
-#define PIXELS_HX8340SPI_H
+#ifndef PIXELS_ST7735_SPI_SW_H
+#define PIXELS_ST7735_SPI_SW_H
 
-class PixelsHX8340SPI : public Pixels, SPIhw {
+class PixelsST7735SPIsw : public Pixels, SPIsw {
 private:
     uint8_t _scl;
     uint8_t _sda;
@@ -33,12 +35,6 @@ private:
     uint8_t _rst;
 
 protected:
-    regtype *registerSCL;
-    regtype *registerSDA;
-
-    regsize bitmaskSCL;
-    regsize bitmaskSDA;
-
     void deviceWriteData(uint8_t high, uint8_t low);
 
     void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -48,15 +44,15 @@ protected:
     void scrollCmd();
 
 public:
-    PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
-    PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl, uint8_t sda,
-                    uint8_t cs, uint8_t rst, uint8_t wr);
+    PixelsST7735SPIsw(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
+    PixelsST7735SPIsw(uint16_t width, uint16_t height,uint8_t scl,
+                    uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
 
     void init();
 };
 
-PixelsHX8340SPI::PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs,
-                                 uint8_t rst, uint8_t wr) : Pixels(176, 220, cs) {
+PixelsST7735SPIsw::PixelsST7735SPIsw(uint8_t scl, uint8_t sda,
+                                 uint8_t cs, uint8_t rst, uint8_t wr) : Pixels(128, 160, cs) {
     scrollSupported = true;
     _scl = scl;
     _sda = sda;
@@ -65,7 +61,7 @@ PixelsHX8340SPI::PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs,
     _rst = rst;
 }
 
-PixelsHX8340SPI::PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl,
+PixelsST7735SPIsw::PixelsST7735SPIsw(uint16_t width, uint16_t height, uint8_t scl,
                                  uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) : Pixels( width, height, cs) {
     scrollSupported = true;
     _scl = scl;
@@ -75,7 +71,7 @@ PixelsHX8340SPI::PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl,
     _rst = rst;
 }
 
-void PixelsHX8340SPI::init() {
+void PixelsST7735SPIsw::init() {
 
     digitalWrite(_rst,LOW);
     delay(100);
@@ -91,112 +87,123 @@ void PixelsHX8340SPI::init() {
     initSPI(_scl, _sda, _cs, _wr);
 
     CSELECT;
-
-    writeCmd(0xC1);
-    writeData(0xFF);
-    writeData(0x83);
-    writeData(0x40);
     writeCmd(0x11);
+    delay(12);
 
-    delay(100);
-
-    writeCmd(0xCA);
-    writeData(0x70);
-    writeData(0x00);
-    writeData(0xD9);
+    writeCmd(0xB1);
     writeData(0x01);
-    writeData(0x11);
-
-    writeCmd(0xC9);
-    writeData(0x90);
-    writeData(0x49);
-    writeData(0x10);
-    writeData(0x28);
-    writeData(0x28);
-    writeData(0x10);
-    writeData(0x00);
-    writeData(0x06);
-
-    delay(20);
-
-    writeCmd(0xC2);
-    writeData(0x60);
-    writeData(0x71);
+    writeData(0x2C);
+    writeData(0x2D);
+    writeCmd(0xB2);
     writeData(0x01);
-    writeData(0x0E);
-    writeData(0x05);
-    writeData(0x02);
-    writeData(0x09);
-    writeData(0x31);
-    writeData(0x0A);
-
-    writeCmd(0xc3);
-    writeData(0x67);
-    writeData(0x30);
-    writeData(0x61);
-    writeData(0x17);
-    writeData(0x48);
-    writeData(0x07);
-    writeData(0x05);
-    writeData(0x33);
-
-    delay(10);
-
-    writeCmd(0xB5);
-    writeData(0x35);
-    writeData(0x20);
-    writeData(0x45);
+    writeData(0x2C);
+    writeData(0x2D);
+    writeCmd(0xB3);
+    writeData(0x01);
+    writeData(0x2C);
+    writeData(0x2D);
+    writeData(0x01);
+    writeData(0x2C);
+    writeData(0x2D);
 
     writeCmd(0xB4);
+    writeData(0x07);
+
+    writeCmd(0xC0);
+    writeData(0xA2);
+    writeData(0x02);
+    writeData(0x84);
+    writeCmd(0xC1);
+    writeData(0xC5);
+    writeCmd(0xC2);
+    writeData(0x0A);
+    writeData(0x00);
+    writeCmd(0xC3);
+    writeData(0x8A);
+    writeData(0x2A);
+    writeCmd(0xC4);
+    writeData(0x8A);
+    writeData(0xEE);
+
+    writeCmd(0xC5);
+    writeData(0x0E);
+
+    writeCmd(0x36);
+    writeData(0xC8);
+
+    writeCmd(0xe0);
+    writeData(0x0f);
+    writeData(0x1a);
+    writeData(0x0f);
+    writeData(0x18);
+    writeData(0x2f);
+    writeData(0x28);
+    writeData(0x20);
+    writeData(0x22);
+    writeData(0x1f);
+    writeData(0x1b);
+    writeData(0x23);
+    writeData(0x37);
+    writeData(0x00);
+
+    writeData(0x07);
+    writeData(0x02);
+    writeData(0x10);
+    writeCmd(0xe1);
+    writeData(0x0f);
+    writeData(0x1b);
+    writeData(0x0f);
+    writeData(0x17);
     writeData(0x33);
-    writeData(0x25);
-    writeData(0x4c);
-
-    delay(10);
-
-    writeCmd(0x3a);
-    writeData(0x05);
-    writeCmd(0x29);
-
-    delay(10);
-
-    writeCmd(0x33);
+    writeData(0x2c);
+    writeData(0x29);
+    writeData(0x2e);
+    writeData(0x30);
+    writeData(0x30);
+    writeData(0x39);
+    writeData(0x3f);
     writeData(0x00);
-    writeData(0x00);
-    writeData(0x00);
-    writeData(0xdc);
-    writeData(0x00);
-    writeData(0x00);
+    writeData(0x07);
+    writeData(0x03);
+    writeData(0x10);
 
     writeCmd(0x2a);
     writeData(0x00);
     writeData(0x00);
     writeData(0x00);
-    writeData(0xaf);
+    writeData(0x7f);
     writeCmd(0x2b);
     writeData(0x00);
     writeData(0x00);
     writeData(0x00);
-    writeData(0xdb);
+    writeData(0x9f);
 
-    writeCmd(0x2c);
+    writeCmd(0xF0);
+    writeData(0x01);
+    writeCmd(0xF6);
+    writeData(0x00);
+
+    writeCmd(0x3A);
+    writeData(0x05);
+    writeCmd(0x29);
 
     CDESELECT;
 }
 
-void PixelsHX8340SPI::scrollCmd() {
+void PixelsST7735SPIsw::scrollCmd() {
     CSELECT;
+    // the feature seems to be undocumented in the datasheet
     writeCmd(0x37);
-    writeData(highByte(currentScroll));
-    writeData(lowByte(currentScroll));
+    writeData(highByte(deviceHeight - currentScroll));
+    writeData(lowByte(deviceHeight - currentScroll));
     CDESELECT;
 }
 
-void PixelsHX8340SPI::setFillDirection(uint8_t direction) {
+void PixelsST7735SPIsw::setFillDirection(uint8_t direction) {
     fillDirection = direction;
 }
 
-void PixelsHX8340SPI::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsST7735SPIsw::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
     CSELECT;
 
     setRegion(x1, y1, x2, y2);
@@ -234,7 +241,7 @@ void PixelsHX8340SPI::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, 
     CDESELECT;
 }
 
-void PixelsHX8340SPI::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsST7735SPIsw::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
     writeCmd(0x2a);
     writeData(x1>>8);
     writeData(x1);
@@ -248,7 +255,7 @@ void PixelsHX8340SPI::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) 
     writeCmd(0x2c);
 }
 
-void PixelsHX8340SPI::deviceWriteData(uint8_t high, uint8_t low) {
+void PixelsST7735SPIsw::deviceWriteData(uint8_t high, uint8_t low) {
     writeData(high);
     writeData(low);
 }

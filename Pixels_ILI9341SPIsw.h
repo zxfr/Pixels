@@ -15,16 +15,18 @@
  */
 
 /*
- * Pixels port to HX8340-B controller, hardware SPI mode, ITDB02-2.2SP
+ * Pixels port to ILI9341 controller, SPI mode (ElecFreaks TFT2.2SP Shield)
+ * SPI is in bit banging mode, as the shield does not connect the hardware SPI (SCL=13, SDA=11)
+ * to the display controller
  */
 
 #include "Pixels.h"
-#include "SPIhw.h"
+#include "SPIsw.h"
 
-#ifndef PIXELS_HX8340SPI_H
-#define PIXELS_HX8340SPI_H
+#ifndef PIXELS_ILI9341_SPI_SW_H
+#define PIXELS_ILI9341_SPI_SW_H
 
-class PixelsHX8340SPI : public Pixels, SPIhw {
+class PixelsILI9341SPIsw : public Pixels, SPIsw {
 private:
     uint8_t _scl;
     uint8_t _sda;
@@ -33,12 +35,6 @@ private:
     uint8_t _rst;
 
 protected:
-    regtype *registerSCL;
-    regtype *registerSDA;
-
-    regsize bitmaskSCL;
-    regsize bitmaskSDA;
-
     void deviceWriteData(uint8_t high, uint8_t low);
 
     void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -48,15 +44,15 @@ protected:
     void scrollCmd();
 
 public:
-    PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
-    PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl, uint8_t sda,
-                    uint8_t cs, uint8_t rst, uint8_t wr);
+    PixelsILI9341SPIsw(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
+    PixelsILI9341SPIsw(uint16_t width, uint16_t height,uint8_t scl,
+                     uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
 
     void init();
 };
 
-PixelsHX8340SPI::PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs,
-                                 uint8_t rst, uint8_t wr) : Pixels(176, 220, cs) {
+PixelsILI9341SPIsw::PixelsILI9341SPIsw(uint8_t scl, uint8_t sda,
+                                   uint8_t cs, uint8_t rst, uint8_t wr) : Pixels(240, 320, cs) {
     scrollSupported = true;
     _scl = scl;
     _sda = sda;
@@ -65,8 +61,8 @@ PixelsHX8340SPI::PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs,
     _rst = rst;
 }
 
-PixelsHX8340SPI::PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl,
-                                 uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) : Pixels( width, height, cs) {
+PixelsILI9341SPIsw::PixelsILI9341SPIsw(uint16_t width, uint16_t height, uint8_t scl,
+                                   uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) : Pixels( width, height,cs) {
     scrollSupported = true;
     _scl = scl;
     _sda = sda;
@@ -75,7 +71,7 @@ PixelsHX8340SPI::PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl,
     _rst = rst;
 }
 
-void PixelsHX8340SPI::init() {
+void PixelsILI9341SPIsw::init() {
 
     digitalWrite(_rst,LOW);
     delay(100);
@@ -92,99 +88,114 @@ void PixelsHX8340SPI::init() {
 
     CSELECT;
 
-    writeCmd(0xC1);
-    writeData(0xFF);
-    writeData(0x83);
-    writeData(0x40);
-    writeCmd(0x11);
-
-    delay(100);
-
-    writeCmd(0xCA);
-    writeData(0x70);
+    writeCmd(0xCB);
+    writeData(0x39);
+    writeData(0x2C);
     writeData(0x00);
-    writeData(0xD9);
-    writeData(0x01);
-    writeData(0x11);
-
-    writeCmd(0xC9);
-    writeData(0x90);
-    writeData(0x49);
-    writeData(0x10);
-    writeData(0x28);
-    writeData(0x28);
-    writeData(0x10);
-    writeData(0x00);
-    writeData(0x06);
-
-    delay(20);
-
-    writeCmd(0xC2);
-    writeData(0x60);
-    writeData(0x71);
-    writeData(0x01);
-    writeData(0x0E);
-    writeData(0x05);
+    writeData(0x34);
     writeData(0x02);
-    writeData(0x09);
-    writeData(0x31);
-    writeData(0x0A);
 
-    writeCmd(0xc3);
-    writeData(0x67);
-    writeData(0x30);
-    writeData(0x61);
-    writeData(0x17);
-    writeData(0x48);
-    writeData(0x07);
-    writeData(0x05);
-    writeData(0x33);
+    writeCmd(0xCF);
+    writeData(0x00);
+    writeData(0XC1);
+    writeData(0X30);
 
-    delay(10);
+    writeCmd(0xE8);
+    writeData(0x85);
+    writeData(0x00);
+    writeData(0x78);
 
-    writeCmd(0xB5);
-    writeData(0x35);
+    writeCmd(0xEA);
+    writeData(0x00);
+    writeData(0x00);
+
+    writeCmd(0xED);
+    writeData(0x64);
+    writeData(0x03);
+    writeData(0X12);
+    writeData(0X81);
+
+    writeCmd(0xF7);
     writeData(0x20);
-    writeData(0x45);
 
-    writeCmd(0xB4);
-    writeData(0x33);
-    writeData(0x25);
-    writeData(0x4c);
+    writeCmd(0xC0);    //Power control
+    writeData(0x23);   //VRH[5:0]
 
-    delay(10);
+    writeCmd(0xC1);    //Power control
+    writeData(0x10);   //SAP[2:0];BT[3:0]
 
-    writeCmd(0x3a);
-    writeData(0x05);
-    writeCmd(0x29);
+    writeCmd(0xC5);    //VCM control
+    writeData(0x3e);   //Contrast
+    writeData(0x28);
 
-    delay(10);
+    writeCmd(0xC7);    //VCM control2
+    writeData(0x86);   //--
 
-    writeCmd(0x33);
+    writeCmd(0x36);    // Memory Access Control
+    writeData(0x48);   //C8	   //48 68竖屏//28 E8 横屏
+
+    writeCmd(0x3A);
+    writeData(0x55);
+
+    writeCmd(0xB1);
     writeData(0x00);
-    writeData(0x00);
-    writeData(0x00);
-    writeData(0xdc);
-    writeData(0x00);
+    writeData(0x18);
+
+    writeCmd(0xB6);    // Display Function Control
+    writeData(0x08);
+    writeData(0x82);
+    writeData(0x27);
+/*
+    writeCmd(0xF2);    // 3Gamma Function Disable
     writeData(0x00);
 
-    writeCmd(0x2a);
-    writeData(0x00);
-    writeData(0x00);
-    writeData(0x00);
-    writeData(0xaf);
-    writeCmd(0x2b);
-    writeData(0x00);
-    writeData(0x00);
-    writeData(0x00);
-    writeData(0xdb);
+    writeCmd(0x26);    //Gamma curve selected
+    writeData(0x01);
 
+    writeCmd(0xE0);    //Set Gamma
+    writeData(0x0F);
+    writeData(0x31);
+    writeData(0x2B);
+    writeData(0x0C);
+    writeData(0x0E);
+    writeData(0x08);
+    writeData(0x4E);
+    writeData(0xF1);
+    writeData(0x37);
+    writeData(0x07);
+    writeData(0x10);
+    writeData(0x03);
+    writeData(0x0E);
+    writeData(0x09);
+    writeData(0x00);
+
+    writeCmd(0XE1);    //Set Gamma
+    writeData(0x00);
+    writeData(0x0E);
+    writeData(0x14);
+    writeData(0x03);
+    writeData(0x11);
+    writeData(0x07);
+    writeData(0x31);
+    writeData(0xC1);
+    writeData(0x48);
+    writeData(0x08);
+    writeData(0x0F);
+    writeData(0x0C);
+    writeData(0x31);
+    writeData(0x36);
+    writeData(0x0F);
+*/
+    writeCmd(0x11);    //Exit Sleep
+    delay(120);
+
+    writeCmd(0x29);    //Display on
     writeCmd(0x2c);
 
     CDESELECT;
 }
 
-void PixelsHX8340SPI::scrollCmd() {
+void PixelsILI9341SPIsw::scrollCmd() {
     CSELECT;
     writeCmd(0x37);
     writeData(highByte(currentScroll));
@@ -192,11 +203,11 @@ void PixelsHX8340SPI::scrollCmd() {
     CDESELECT;
 }
 
-void PixelsHX8340SPI::setFillDirection(uint8_t direction) {
+void PixelsILI9341SPIsw::setFillDirection(uint8_t direction) {
     fillDirection = direction;
 }
 
-void PixelsHX8340SPI::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsILI9341SPIsw::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
     CSELECT;
 
     setRegion(x1, y1, x2, y2);
@@ -234,7 +245,7 @@ void PixelsHX8340SPI::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, 
     CDESELECT;
 }
 
-void PixelsHX8340SPI::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsILI9341SPIsw::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
     writeCmd(0x2a);
     writeData(x1>>8);
     writeData(x1);
@@ -248,7 +259,7 @@ void PixelsHX8340SPI::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) 
     writeCmd(0x2c);
 }
 
-void PixelsHX8340SPI::deviceWriteData(uint8_t high, uint8_t low) {
+void PixelsILI9341SPIsw::deviceWriteData(uint8_t high, uint8_t low) {
     writeData(high);
     writeData(low);
 }

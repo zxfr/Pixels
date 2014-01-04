@@ -58,10 +58,11 @@ public:
 };
 
 
-PixelsILI9325::PixelsILI9325() {
+PixelsILI9325::PixelsILI9325() : Pixels(240, 320, 40) { // CS is hardcoded in the lib version
+    scrollSupported = true;
 }
 
-PixelsILI9325::PixelsILI9325(uint16_t width, uint16_t height) : Pixels( width, height) {
+PixelsILI9325::PixelsILI9325(uint16_t width, uint16_t height) : Pixels( width, height, 40) {
     scrollSupported = true;
 }
 
@@ -96,7 +97,6 @@ void PixelsILI9325::init() {
 
     registerRS	= portOutputRegister(digitalPinToPort(pinRS));
     registerWR	= portOutputRegister(digitalPinToPort(pinWR));
-    registerCS	= portOutputRegister(digitalPinToPort(pinCS));
     registerRST	= portOutputRegister(digitalPinToPort(pinRST));
     if ( pinRD > 0 ) {
         registerRD	= portOutputRegister(digitalPinToPort(pinRD));
@@ -104,7 +104,6 @@ void PixelsILI9325::init() {
 
     bitmaskRS	= digitalPinToBitMask(pinRS);
     bitmaskWR	= digitalPinToBitMask(pinWR);
-    bitmaskCS	= digitalPinToBitMask(pinCS);
     bitmaskRST	= digitalPinToBitMask(pinRST);
     if ( pinRD > 0 ) {
         bitmaskRD	= digitalPinToBitMask(pinRD);

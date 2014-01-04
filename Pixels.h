@@ -170,9 +170,7 @@ protected:
     void hLine(int16_t x1, int16_t y1, int16_t x2);
     void vLine(int16_t x1, int16_t y1, int16_t y2);
 
-    void deviceWriteCmd(uint8_t b) {};
     virtual void deviceWriteData(uint8_t hi, uint8_t lo) {};
-    void deviceWriteCmdData(uint8_t cmd, uint16_t data) {};
 
     virtual void scrollCmd() {};
 
@@ -192,13 +190,13 @@ public:
      * context.
      * Implicitly sets the target device width to 240, height to 320
      */
-    Pixels();
+    Pixels(uint8_t chipSelect);
     /**
      * Constructs a new <code>Pixels</code> object for the reference platform TFT_PQ 2.4 (ILI9325 controller) + ITDB02 MEGA Shield v1.1.
      * @param width target device width (in pixels)
      * @param height target device height (in pixels)
      */
-    Pixels(uint16_t width, uint16_t height);
+    Pixels(uint16_t width, uint16_t height, uint8_t chipSelect);
     /**
      * Initializes hardware with defaults.
      */
