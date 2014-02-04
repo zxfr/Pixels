@@ -24,8 +24,8 @@
  * More platforms coming soon
  */
 
-#ifndef PIXELS_H
-#define PIXELS_H
+#ifndef PIXELS_BASE_H
+#define PIXELS_BASE_H
 
 // #define DISABLE_ANTIALIASING 1
 
@@ -65,15 +65,6 @@
 
 #define swap(a, b) {int16_t buf = a; a = b; b = buf;}
 
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-#define deviceWrite(hi, lo) PORTA = hi; pulse_low(registerWR, bitmaskWR); PORTA = lo; pulse_low(registerWR, bitmaskWR)
-#define deviceWriteTwice(b) PORTA = b; pulse_low(registerWR, bitmaskWR); pulse_low(registerWR, bitmaskWR)
-#else
-#define deviceWrite(hi, lo) PORTD = hi; pulse_low(registerWR, bitmaskWR); PORTD = lo; pulse_low(registerWR, bitmaskWR)
-#define deviceWriteTwice(b) PORTD = b; pulse_low(registerWR, bitmaskWR); pulse_low(registerWR, bitmaskWR)
-#endif
-
-
 #define BITMASK_FONT 1
 #define ANTIALIASED_FONT 2
 #define HEADER_LENGTH 5
@@ -99,8 +90,11 @@
 #define fpart(X) (((double)(X))-(double)ipart(X))
 #define rfpart(X) (1.0-fpart(X))
 
-#define CSELECT cbi(registerCS, bitmaskCS)
-#define CDESELECT sbi(registerCS, bitmaskCS)
+extern regtype *registerCS; // chip select
+extern regsize bitmaskCS;
+
+#define chipSelect() cbi(registerCS, bitmaskCS)
+#define chipDeselect() sbi(registerCS, bitmaskCS)
 
 class RGB {
 public:
@@ -116,8 +110,7 @@ public:
     uint16_t convertTo565();
 };
 
-
-class Pixels {
+class PixelsBase {
 protected:
     /* device physical dimension in portrait orientation */
     uint16_t deviceWidth;
@@ -151,9 +144,6 @@ protected:
     int16_t flipScroll;
     boolean scrollCleanMode;
 
-    regtype *registerCS; // chip select
-    regsize bitmaskCS;
-
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
 
     virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
@@ -186,17 +176,10 @@ protected:
 public:
     /**
      * Constructs a new <code>Pixels</code> object for the reference platform TFT_PQ 2.4 (ILI9325 controller) + ITDB02 MEGA Shield v1.1.
-     * This constructor is the default contructor for a graphics
-     * context.
-     * Implicitly sets the target device width to 240, height to 320
-     */
-    Pixels(uint8_t chipSelect);
-    /**
-     * Constructs a new <code>Pixels</code> object for the reference platform TFT_PQ 2.4 (ILI9325 controller) + ITDB02 MEGA Shield v1.1.
      * @param width target device width (in pixels)
      * @param height target device height (in pixels)
      */
-    Pixels(uint16_t width, uint16_t height, uint8_t chipSelect);
+    PixelsBase(uint16_t width, uint16_t height);
     /**
      * Initializes hardware with defaults.
      */
@@ -212,7 +195,9 @@ public:
      * @return the current orientation
      * @see setOrientation(uint8_t)
      */
-    uint8_t getOrientation();
+    inline uint8_t getOrientation() {
+        return orientation;
+    }
     /**
      * Enables or disables antialiasing by a drawing of graphical primitives. The metod does not impact antialiased fonts.
      * Antialiased output in general requires more resources/time to output comparing to "grainy" output mode
@@ -223,45 +208,75 @@ public:
      * Gets the current antialiasing mode.
      * @return a boolean value that shows whether the antialiasing is be enabled or not
      */
-    boolean isAntialiased();
+    inline boolean isAntialiased() {
+        return antialiasing;
+    }
     /**
      * Enables or disables scroll feature.
      * @param enable a boolean value that determines whether the scroll feature should be enabled or not
      * @see scroll(int16_t,int8_t)
      */
-    void enableScroll(boolean enable);
+    inline void enableScroll(boolean enable) {
+        scrollEnabled = enable;
+    }
     /**
      * @returns <i>true</i> if the target device can scroll and the scroll feature is enabled.
      * @see scroll(int16_t,int8_t)
      * @see enableScroll(boolean)
      */
-    boolean canScroll();
+    inline boolean canScroll() {
+        return scrollEnabled & scrollSupported;
+    }
     /**
      * Sets the current line width. For time being the line width is respected by
      * drawLine(int16_t,int16_t,int16_t,int16_t) and a line width control is still "under construction".
      * @param width new line width.
      */
-    void setLineWidth(double width);
+    inline void setLineWidth(double width) {
+        lineWidth = width;
+    }
     /**
      * Returns the current line width.
      * @return the current line width.
      */
-    double getLineWidth();
+    inline double getLineWidth() {
+        return lineWidth;
+    }
+    /**
+     * Returns device width.
+     * @return device width.
+     */
+    inline uint16_t getWidth() {
+        return width;
+    }
+    /**
+     * Returns device height.
+     * @return device height.
+     */
+    inline uint16_t getHeight() {
+        return height;
+    }
     /**
      * Bounds the coordinate space to the device controller video RAM. The physical output depends on the actual scroll position.
      */
-    void setOriginRelative();
+    inline void setOriginRelative() {
+        relativeOrigin = true;
+    }
     /**
      * Bounds the coordinate space to physical device pixels, ignoring actual scroll position.
      * @see scroll(int16_t,int8_t)
      */
-    void setOriginAbsolute();
+    inline void setOriginAbsolute() {
+        relativeOrigin = false;
+    }
     /**
      * @return <i>true</i> if the current positioning is relative.
      * @see setOriginRelative()
      * @see setOriginAbsolute()
      */
-    boolean isOriginRelative();
+    inline boolean isOriginRelative() {
+        return relativeOrigin;
+    }
     /**
      * Outout fine tuning method for slow devices
      * @param direction accepts FILL_TOPDOWN, FILL_LEFTRIGHT, FILL_DOWNTOP or FILL_RIGHTLEFT
@@ -278,7 +293,9 @@ public:
      * @param g the green component
      * @param b the blue component
      */
-    void setBackground(uint8_t r, uint8_t g, uint8_t b);
+    inline void setBackground(uint8_t r, uint8_t g, uint8_t b) {
+        setBackground(RGB(r, g, b));
+    }
     /**
      * Sets the current color to the specified color.
      * All subsequent graphics operations use this specified color.
@@ -286,29 +303,39 @@ public:
      * @param g the green component
      * @param b the blue component
      */
-    void setColor(uint8_t r, uint8_t g, uint8_t b);
+    inline void setColor(uint8_t r, uint8_t g, uint8_t b) {
+        setColor(RGB(r, g, b));
+    }
     /**
      * Sets the current background color to the specified color.
      * All subsequent relevant graphics operations use this specified color.
      * @param color color object
      */
-    void setBackground(RGB color);
+    inline void setBackground(RGB color) {
+        background = color;
+    }
     /**
      * Sets the current color to the specified color.
      * All subsequent graphics operations use this specified color.
      * @param color color object
      */
-    void setColor(RGB color);
+    inline void setColor(RGB color) {
+        foreground = color;
+    }
     /**
      * Gets the graphics context's current background color.
      * @return    the graphics context's current background color.
      */
-    RGB getBackground();
+    inline RGB getBackground() {
+        return background;
+    }
     /**
      * Gets the graphics context's current color.
      * @return    the graphics context's current color.
      */
-    RGB getColor();
+    inline RGB getColor() {
+        return foreground;
+    }
     /**
      * Gets a pixel color at the point
      * <code>(x,&nbsp;y)</code> in the current coordinate system.

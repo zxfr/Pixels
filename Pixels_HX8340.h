@@ -19,26 +19,22 @@
  */
 
 #include "Pixels.h"
-#include "SPIhw.h"
 
-#ifndef PIXELS_HX8340SPI_H
-#define PIXELS_HX8340SPI_H
+#ifndef PIXELS_HX8340_H
+#define PIXELS_HX8340_H
 
-class PixelsHX8340SPI : public Pixels, SPIhw {
-private:
-    uint8_t _scl;
-    uint8_t _sda;
-    uint8_t _wr;
-    uint8_t _cs;
-    uint8_t _rst;
-
+class Pixels : public PixelsBase
+#if defined(PIXELS_SPISW_H)
+                                    ,SPIsw
+#elif defined(PIXELS_SPIHW_H)
+                                    ,SPIhw
+#elif defined(PIXELS_PPI8_H)
+                                    ,PPI8
+#elif defined(PIXELS_PPI16_H)
+                                    ,PPI16
+#endif
+{
 protected:
-    regtype *registerSCL;
-    regtype *registerSDA;
-
-    regsize bitmaskSCL;
-    regsize bitmaskSDA;
-
     void deviceWriteData(uint8_t high, uint8_t low);
 
     void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -48,49 +44,26 @@ protected:
     void scrollCmd();
 
 public:
-    PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
-    PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl, uint8_t sda,
-                    uint8_t cs, uint8_t rst, uint8_t wr);
+    Pixels() : PixelsBase(176, 220) { // Itead ITDB02-2.2SP as default
+        scrollSupported = true;
+        setSpiPins(13, 11, 10, 7, 9); // dummy code in PPI case
+        setPpiPins(38, 39, 40, 41, 0); // dummy code in SPI case
+    }
+
+    Pixels(uint16_t width, uint16_t height) : PixelsBase( width, height) {
+        scrollSupported = true;
+        setSpiPins(13, 11, 10, 7 ,9); // dummy code in PPI case
+        setPpiPins(38, 39, 40, 41, 0); // dummy code in SPI case
+    }
 
     void init();
 };
 
-PixelsHX8340SPI::PixelsHX8340SPI(uint8_t scl, uint8_t sda, uint8_t cs,
-                                 uint8_t rst, uint8_t wr) : Pixels(176, 220, cs) {
-    scrollSupported = true;
-    _scl = scl;
-    _sda = sda;
-    _wr = wr;
-    _cs = cs;
-    _rst = rst;
-}
+void Pixels::init() {
 
-PixelsHX8340SPI::PixelsHX8340SPI(uint16_t width, uint16_t height, uint8_t scl,
-                                 uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) : Pixels( width, height, cs) {
-    scrollSupported = true;
-    _scl = scl;
-    _sda = sda;
-    _wr = wr;
-    _cs = cs;
-    _rst = rst;
-}
+    initInterface();
 
-void PixelsHX8340SPI::init() {
-
-    digitalWrite(_rst,LOW);
-    delay(100);
-    digitalWrite(_rst,HIGH);
-    delay(100);
-
-    pinMode(_scl,OUTPUT);
-    pinMode(_sda,OUTPUT);
-    pinMode(_wr,OUTPUT);
-    pinMode(_rst,OUTPUT);
-    pinMode(_cs,OUTPUT);
-
-    initSPI(_scl, _sda, _cs, _wr);
-
-    CSELECT;
+    chipSelect();
 
     writeCmd(0xC1);
     writeData(0xFF);
@@ -181,26 +154,28 @@ void PixelsHX8340SPI::init() {
 
     writeCmd(0x2c);
 
-    CDESELECT;
+    chipDeselect();
 }
 
-void PixelsHX8340SPI::scrollCmd() {
-    CSELECT;
+void Pixels::scrollCmd() {
+    chipSelect();
     writeCmd(0x37);
     writeData(highByte(currentScroll));
     writeData(lowByte(currentScroll));
-    CDESELECT;
+    chipDeselect();
 }
 
-void PixelsHX8340SPI::setFillDirection(uint8_t direction) {
+void Pixels::setFillDirection(uint8_t direction) {
     fillDirection = direction;
 }
 
-void PixelsHX8340SPI::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
-    CSELECT;
+void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+    chipSelect();
 
     setRegion(x1, y1, x2, y2);
     int32_t counter = (int32_t)(x2 - x1 + 1) * (y2 - y1 + 1);
+
+    registerSelect();
 
     uint8_t lo = lowByte(color);
     uint8_t hi = highByte(color);
@@ -231,10 +206,45 @@ void PixelsHX8340SPI::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, 
         writeData(hi);writeData(lo);
     }
 
-    CDESELECT;
+    chipDeselect();
 }
 
-void PixelsHX8340SPI::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+    if ( orientation != PORTRAIT ) {
+        int16_t buf;
+        switch( orientation ) {
+        case LANDSCAPE:
+            buf = x1;
+            x1 = deviceWidth - y1 - 1;
+            y1 = buf;
+            buf = x2;
+            x2 = deviceWidth - y2 - 1;
+            y2 = buf;
+            break;
+        case PORTRAIT_FLIP:
+            y1 = deviceHeight - y1 - 1;
+            y2 = deviceHeight - y2 - 1;
+            x1 = deviceWidth - x1 - 1;
+            x2 = deviceWidth - x2 - 1;
+            break;
+        case LANDSCAPE_FLIP:
+            buf = y1;
+            y1 = deviceHeight - x1 - 1;
+            x1 = buf;
+            buf = y2;
+            y2 = deviceHeight - x2 - 1;
+            x2 = buf;
+            break;
+        }
+
+        if (x2 < x1) {
+            swap(x1, x2);
+        }
+        if (y2 < y1) {
+            swap(y1, y2);
+        }
+    }
+
     writeCmd(0x2a);
     writeData(x1>>8);
     writeData(x1);
@@ -248,7 +258,7 @@ void PixelsHX8340SPI::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) 
     writeCmd(0x2c);
 }
 
-void PixelsHX8340SPI::deviceWriteData(uint8_t high, uint8_t low) {
+void Pixels::deviceWriteData(uint8_t high, uint8_t low) {
     writeData(high);
     writeData(low);
 }

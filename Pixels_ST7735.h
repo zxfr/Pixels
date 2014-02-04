@@ -21,19 +21,21 @@
  */
 
 #include "Pixels.h"
-#include "SPIsw.h"
 
-#ifndef PIXELS_ST7735_SPI_SW_H
-#define PIXELS_ST7735_SPI_SW_H
+#ifndef PIXELS_ST7735_H
+#define PIXELS_ST7735_H
 
-class PixelsST7735SPIsw : public Pixels, SPIsw {
-private:
-    uint8_t _scl;
-    uint8_t _sda;
-    uint8_t _wr;
-    uint8_t _cs;
-    uint8_t _rst;
-
+class Pixels : public PixelsBase
+#if defined(PIXELS_SPISW_H)
+                                    ,SPIsw
+#elif defined(PIXELS_SPIHW_H)
+                                    ,SPIhw
+#elif defined(PIXELS_PPI8_H)
+                                    ,PPI8
+#elif defined(PIXELS_PPI16_H)
+                                    ,PPI16
+#endif
+{
 protected:
     void deviceWriteData(uint8_t high, uint8_t low);
 
@@ -44,49 +46,27 @@ protected:
     void scrollCmd();
 
 public:
-    PixelsST7735SPIsw(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
-    PixelsST7735SPIsw(uint16_t width, uint16_t height,uint8_t scl,
-                    uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr);
+    Pixels(uint16_t width, uint16_t height) : PixelsBase(width, height) { // ElecFreaks TFT1.8SP shield pins
+        scrollSupported = true;
+        setSpiPins(6, 7, 5, 3 ,4); // dummy code in PPI case
+        setPpiPins(38, 39, 40, 41, 0); // dummy code in SPI case
+    }
+
+    Pixels() : PixelsBase(128, 160) { // ElecFreaks TFT1.8SP shield as default
+        scrollSupported = true;
+        setSpiPins(6, 7, 5, 3 ,4); // dummy code in PPI case
+        setPpiPins(38, 39, 40, 41, 0); // dummy code in SPI case
+    }
 
     void init();
 };
 
-PixelsST7735SPIsw::PixelsST7735SPIsw(uint8_t scl, uint8_t sda,
-                                 uint8_t cs, uint8_t rst, uint8_t wr) : Pixels(128, 160, cs) {
-    scrollSupported = true;
-    _scl = scl;
-    _sda = sda;
-    _wr = wr;
-    _cs = cs;
-    _rst = rst;
-}
 
-PixelsST7735SPIsw::PixelsST7735SPIsw(uint16_t width, uint16_t height, uint8_t scl,
-                                 uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) : Pixels( width, height, cs) {
-    scrollSupported = true;
-    _scl = scl;
-    _sda = sda;
-    _wr = wr;
-    _cs = cs;
-    _rst = rst;
-}
+void Pixels::init() {
 
-void PixelsST7735SPIsw::init() {
+    initInterface();
 
-    digitalWrite(_rst,LOW);
-    delay(100);
-    digitalWrite(_rst,HIGH);
-    delay(100);
-
-    pinMode(_scl,OUTPUT);
-    pinMode(_sda,OUTPUT);
-    pinMode(_wr,OUTPUT);
-    pinMode(_rst,OUTPUT);
-    pinMode(_cs,OUTPUT);
-
-    initSPI(_scl, _sda, _cs, _wr);
-
-    CSELECT;
+    chipSelect();
     writeCmd(0x11);
     delay(12);
 
@@ -187,27 +167,29 @@ void PixelsST7735SPIsw::init() {
     writeData(0x05);
     writeCmd(0x29);
 
-    CDESELECT;
+    chipDeselect();
 }
 
-void PixelsST7735SPIsw::scrollCmd() {
-    CSELECT;
+void Pixels::scrollCmd() {
+    chipSelect();
     // the feature seems to be undocumented in the datasheet
     writeCmd(0x37);
     writeData(highByte(deviceHeight - currentScroll));
     writeData(lowByte(deviceHeight - currentScroll));
-    CDESELECT;
+    chipDeselect();
 }
 
-void PixelsST7735SPIsw::setFillDirection(uint8_t direction) {
+void Pixels::setFillDirection(uint8_t direction) {
     fillDirection = direction;
 }
 
-void PixelsST7735SPIsw::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
-    CSELECT;
+void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+    chipSelect();
 
     setRegion(x1, y1, x2, y2);
     int32_t counter = (int32_t)(x2 - x1 + 1) * (y2 - y1 + 1);
+
+    registerSelect();
 
     uint8_t lo = lowByte(color);
     uint8_t hi = highByte(color);
@@ -238,10 +220,45 @@ void PixelsST7735SPIsw::quickFill (int color, int16_t x1, int16_t y1, int16_t x2
         writeData(hi);writeData(lo);
     }
 
-    CDESELECT;
+    chipDeselect();
 }
 
-void PixelsST7735SPIsw::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+    if ( orientation != PORTRAIT ) {
+        int16_t buf;
+        switch( orientation ) {
+        case LANDSCAPE:
+            buf = x1;
+            x1 = deviceWidth - y1 - 1;
+            y1 = buf;
+            buf = x2;
+            x2 = deviceWidth - y2 - 1;
+            y2 = buf;
+            break;
+        case PORTRAIT_FLIP:
+            y1 = deviceHeight - y1 - 1;
+            y2 = deviceHeight - y2 - 1;
+            x1 = deviceWidth - x1 - 1;
+            x2 = deviceWidth - x2 - 1;
+            break;
+        case LANDSCAPE_FLIP:
+            buf = y1;
+            y1 = deviceHeight - x1 - 1;
+            x1 = buf;
+            buf = y2;
+            y2 = deviceHeight - x2 - 1;
+            x2 = buf;
+            break;
+        }
+
+        if (x2 < x1) {
+            swap(x1, x2);
+        }
+        if (y2 < y1) {
+            swap(y1, y2);
+        }
+    }
+
     writeCmd(0x2a);
     writeData(x1>>8);
     writeData(x1);
@@ -255,7 +272,7 @@ void PixelsST7735SPIsw::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2
     writeCmd(0x2c);
 }
 
-void PixelsST7735SPIsw::deviceWriteData(uint8_t high, uint8_t low) {
+void Pixels::deviceWriteData(uint8_t high, uint8_t low) {
     writeData(high);
     writeData(low);
 }

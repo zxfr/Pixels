@@ -39,4 +39,7 @@ cleanText	KEYWORD2
 getTextLineHeight	KEYWORD2
 getTextBaseline	KEYWORD2
 getTextWidth	KEYWORD2
+setSpiPins	KEYWORD2
+setPpiPins	KEYWORD2
+
 

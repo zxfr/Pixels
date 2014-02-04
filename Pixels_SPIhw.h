@@ -45,18 +45,16 @@
 
 class SPIhw {
 private:
+    uint8_t pinSCL;
+    uint8_t pinSDA;
+    uint8_t pinWR;
+    uint8_t pinCS;
+    uint8_t pinRST;
+
     regtype *registerSCL;
     regtype *registerSDA;
-    regtype *registerCSx;
-    regsize bitmaskCSx;
     regsize bitmaskSCL;
     regsize bitmaskSDA;
-
-    uint8_t _cs;
-
-protected:
-    void writeCmd(uint8_t b);
-    void writeData(uint8_t data);
 
     void beginSPI();
     void endSPI();
@@ -64,23 +62,80 @@ protected:
     void setSPIDataMode(uint8_t mode);
     void setSPIClockDivider(uint8_t rate);
 
+protected:
+    void reset() {
+        digitalWrite(pinRST,LOW);
+        delay(100);
+        digitalWrite(pinRST,HIGH);
+        delay(100);
+    }
+
+    void writeCmd(uint8_t b);
+    void writeData(uint8_t data);
+
+    void writeData(uint8_t hi, uint8_t lo) {
+        writeData(hi);
+        writeData(lo);
+    }
+
+    void writeDataTwice(uint8_t b) {
+        writeData(b);
+        writeData(b);
+    }
+
+    void writeCmdData(uint8_t cmd, uint16_t data) {
+        writeCmd(cmd);
+        writeData(highByte(data));
+        writeData(lowByte(data));
+    }
+
 public:
-    SPIhw();
-    void initSPI(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t wr);
+    /**
+     * Overrides SPI pins
+     * @param scl
+     * @param sda
+     * @param cs chip select
+     * @param rst reset
+     * @param wr write pin
+     */
+    inline void setSpiPins(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) {
+        pinSCL = scl;
+        pinSDA = sda;
+        pinCS = cs;
+        pinRST = rst;
+        pinWR = wr;
+//        registerCS	= portOutputRegister(digitalPinToPort(cs));
+//        bitmaskCS	= digitalPinToBitMask(cs);
+    }
+
+    /**
+     * Overrides PPI pins
+     * @param cs chip select
+     */
+    inline void setPpiPins(uint8_t rs, uint8_t wr, uint8_t cs, uint8_t rst, uint8_t rd) {
+    }
+
+    inline void registerSelect() {
+    }
+
+    void initInterface();
 };
 
-SPIhw::SPIhw() {
-}
+void SPIhw::initInterface() {
+    registerSCL	= portOutputRegister(digitalPinToPort(pinSCL));
+    bitmaskSCL	= digitalPinToBitMask(pinSCL);
+    registerSDA	= portOutputRegister(digitalPinToPort(pinSDA));
+    bitmaskSDA	= digitalPinToBitMask(pinSDA);
+    registerCS	= portOutputRegister(digitalPinToPort(pinCS));
+    bitmaskCS	= digitalPinToBitMask(pinCS);
 
-void SPIhw::initSPI(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t wr) {
-    _cs = cs;
+    pinMode(pinSCL,OUTPUT);
+    pinMode(pinSDA,OUTPUT);
+    pinMode(pinWR,OUTPUT);
+    pinMode(pinRST,OUTPUT);
+    pinMode(pinCS,OUTPUT);
 
-    registerSCL	= portOutputRegister(digitalPinToPort(scl));
-    bitmaskSCL	= digitalPinToBitMask(scl);
-    registerSDA	= portOutputRegister(digitalPinToPort(sda));
-    bitmaskSDA	= digitalPinToBitMask(sda);
-    registerCSx	= portOutputRegister(digitalPinToPort(10));
-    bitmaskCSx	= digitalPinToBitMask(10);
+    reset();
 
     setSPIBitOrder(MSBFIRST);
     setSPIDataMode(SPI_MODE3);
@@ -115,7 +170,7 @@ void SPIhw::writeData(uint8_t data) {
 void SPIhw::beginSPI() {
   cbi(registerSCL, bitmaskSCL);
   cbi(registerSDA, bitmaskSDA);
-  digitalWrite(_cs, HIGH);
+  digitalWrite(pinCS, HIGH);
 
   // Warning: if the SS pin ever becomes a LOW INPUT then SPI
   // automatically switches to Slave, so the data direction of

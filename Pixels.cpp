@@ -40,31 +40,10 @@ uint16_t RGB::convertTo565() {
     return ((red / 8) << 11) | ((green / 4) << 5) | (blue / 8);
 }
 
+regtype *registerCS; // chip select
+regsize bitmaskCS;
 
-Pixels::Pixels(uint8_t chipSelectPort) {
-    deviceWidth = 240;
-    deviceHeight = 320;
-    this->width = 240;
-    this->height = 320;
-    orientation = PORTRAIT;
-
-    relativeOrigin = true;
-
-    currentScroll = 0;
-    scrollSupported = true;
-    scrollEnabled = true;
-
-    lineWidth = 1;
-    fillDirection = 0;
-
-    setBackground(0,0,0);
-    setColor(0xFF,0xFF,0xFF);
-
-    registerCS	= portOutputRegister(digitalPinToPort(chipSelectPort));
-    bitmaskCS	= digitalPinToBitMask(chipSelectPort);
-}
-
-Pixels::Pixels(uint16_t width, uint16_t height, uint8_t chipSelectPort) {
+PixelsBase::PixelsBase(uint16_t width, uint16_t height) {
     deviceWidth = width < height ? width : height;
     deviceHeight = width > height ? width : height;
     this->width = width;
@@ -82,37 +61,9 @@ Pixels::Pixels(uint16_t width, uint16_t height, uint8_t chipSelectPort) {
 
     setBackground(0,0,0);
     setColor(0xFF,0xFF,0xFF);
-
-    registerCS	= portOutputRegister(digitalPinToPort(chipSelectPort));
-    bitmaskCS	= digitalPinToBitMask(chipSelectPort);
 }
 
-void Pixels::setColor(uint8_t r, uint8_t g, uint8_t b) {
-    setColor(RGB(r, g, b));
-}
-
-void Pixels::setColor(RGB color) {
-    foreground = color;
-}
-
-RGB Pixels::getColor() {
-    return foreground;
-}
-
-void Pixels::setBackground(uint8_t r, uint8_t g, uint8_t b) {
-    setBackground(RGB(r, g, b));
-}
-
-void Pixels::setBackground(RGB color) {
-    background = color;
-}
-
-RGB Pixels::getBackground() {
-    return background;
-}
-
-
-void Pixels::setOrientation( uint8_t direction ){
+void PixelsBase::setOrientation( uint8_t direction ){
 
     orientation = direction;
 
@@ -137,11 +88,7 @@ void Pixels::setOrientation( uint8_t direction ){
     }
 }
 
-uint8_t Pixels::getOrientation() {
-    return orientation;
-}
-
-void Pixels::enableAntialiasing(boolean enable){
+void PixelsBase::enableAntialiasing(boolean enable){
 #ifndef DISABLE_ANTIALIASING
     antialiasing = enable;
 #else
@@ -149,56 +96,23 @@ void Pixels::enableAntialiasing(boolean enable){
 #endif
 }
 
-boolean Pixels::isAntialiased(){
-    return antialiasing;
-}
-
-void Pixels::setOriginRelative() {
-    relativeOrigin = true;
-}
-
-void Pixels::setOriginAbsolute() {
-    relativeOrigin = false;
-}
-
-boolean Pixels::isOriginRelative() {
-    return relativeOrigin;
-}
-
-void Pixels::enableScroll(boolean enable) {
-    scrollEnabled = enable;
-}
-
-boolean Pixels::canScroll() {
-    return scrollEnabled & scrollSupported;
-}
-
-
 /*  Graphic primitives */
 
-void Pixels::clear() {
+void PixelsBase::clear() {
     RGB sav = getColor();
     setColor(background);
     fillRectangle(0, 0, width, height);
     setColor(sav);
 }
 
-RGB Pixels::getPixel(int16_t x, int16_t y) {
+RGB PixelsBase::getPixel(int16_t x, int16_t y) {
     if ( x < 0 || x >= width || y < 0 || y >= height ) {
         return  getBackground();
     }
     return getBackground();
 }
 
-void Pixels::setLineWidth(double width) {
-    lineWidth = width;
-}
-
-double Pixels::getLineWidth() {
-    return lineWidth;
-}
-
-void Pixels::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsBase::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
     if (y1 == y2 && lineWidth == 1) {
         hLine(x1, y1, x2);
@@ -260,18 +174,18 @@ void Pixels::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
     }
 }
 
-void Pixels::drawRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
+void PixelsBase::drawRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
     hLine(x, y, x+width-2);
     vLine(x+width-1, y, y+height-2);
     hLine(x+1, y+height-1, x+width-1);
     vLine(x, y+1, y+height-1);
 }
 
-void Pixels::fillRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
+void PixelsBase::fillRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
     fill(foreground.convertTo565(), x, y, x+width-1, y+height-1);
 }
 
-void Pixels::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
+void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
 
     if ( r < 1 ) {
         drawRectangle(x, y, width, height);
@@ -331,7 +245,7 @@ void Pixels::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
 #endif
 }
 
-void Pixels::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
+void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
 
     if ( r < 1 ) {
         fillRectangle(x, y, width, height);
@@ -395,7 +309,7 @@ void Pixels::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t hei
 #endif
 }
 
-void Pixels::drawCircle(int16_t x, int16_t y, int16_t r) {
+void PixelsBase::drawCircle(int16_t x, int16_t y, int16_t r) {
 
 #ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
@@ -436,7 +350,7 @@ void Pixels::drawCircle(int16_t x, int16_t y, int16_t r) {
 #endif
 }
 
-void Pixels::fillCircle(int16_t x, int16_t y, int16_t r) {
+void PixelsBase::fillCircle(int16_t x, int16_t y, int16_t r) {
     int16_t yy;
     int16_t xx;
 
@@ -455,7 +369,7 @@ void Pixels::fillCircle(int16_t x, int16_t y, int16_t r) {
 #endif
 }
 
-void Pixels::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
+void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
 
 #ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
@@ -587,7 +501,7 @@ void Pixels::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
 #endif
 }
 
-void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
+void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
 
     int16_t rx = width/2;
     int16_t ry = height/2;
@@ -702,7 +616,7 @@ void Pixels::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
 #endif
 }
 
-int8_t Pixels::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, int16_t* data) {
+int8_t PixelsBase::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, int16_t* data) {
     setRegion(x, y, x+width, y+height);
     int16_t ptr = 0;
     for ( int16_t j = 0; j < height; j++ ) {
@@ -714,7 +628,7 @@ int8_t Pixels::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, i
     return 0;
 }
 
-int8_t Pixels::loadBitmap(int16_t x, int16_t y, int16_t sx, int16_t sy, String path) {
+int8_t PixelsBase::loadBitmap(int16_t x, int16_t y, int16_t sx, int16_t sy, String path) {
     int16_t* data = loadFileBytes( path );
     return drawBitmap(x, y, sx, sy, data);
 }
@@ -723,7 +637,7 @@ int8_t Pixels::loadBitmap(int16_t x, int16_t y, int16_t sx, int16_t sy, String p
 
 #ifndef DISABLE_ANTIALIASING
 
-void Pixels::drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsBase::drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
     boolean steep = (y2 > y1 ? y2 - y1 : y1 - y2) > (x2 > x1 ? x2 - x1 : x1 - x2);
     if (steep) {
@@ -770,7 +684,7 @@ void Pixels::drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2)
     }
 }
 
-void Pixels::drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsBase::drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
     double wd = lineWidth;
 
@@ -819,7 +733,7 @@ void Pixels::drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t 
     }
 }
 
-void Pixels::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, int16_t height, int16_t rx, int16_t ry, boolean bordermode) {
+void PixelsBase::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, int16_t height, int16_t rx, int16_t ry, boolean bordermode) {
 
     int16_t i;
     int32_t a2, b2, ds, dt, dxt, t, s, d;
@@ -984,7 +898,7 @@ void Pixels::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, 
     }
 }
 
-void Pixels::drawCircleAntialiaced( int16_t x, int16_t y, int16_t radius, boolean bordermode )	{
+void PixelsBase::drawCircleAntialiaced( int16_t x, int16_t y, int16_t radius, boolean bordermode )	{
     drawRoundRectangleAntialiased(x-radius, y-radius, radius*2, radius*2, radius, radius, bordermode);
 }
 
@@ -993,7 +907,7 @@ void Pixels::drawCircleAntialiaced( int16_t x, int16_t y, int16_t radius, boolea
 /* TEXT */
 
 
-int16_t Pixels::setFont(prog_uchar font[]) {
+int16_t PixelsBase::setFont(prog_uchar font[]) {
     int16_t p1 = pgm_read_byte_near(font + 0);
     int16_t p2 = pgm_read_byte_near(font + 1);
     if ( p1 != 'Z' || p2 != 'F' ) {
@@ -1014,15 +928,15 @@ int16_t Pixels::setFont(prog_uchar font[]) {
     return 0;
 }
 
-void Pixels::print(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
+void PixelsBase::print(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
     printString(xx, yy, text, 0, kerning);
 }
 
-void Pixels::cleanText(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
+void PixelsBase::cleanText(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
     printString(xx, yy, text, 1, kerning);
 }
 
-void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[]) {
+void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[]) {
 
     if ( currentFont == NULL ) {
         return;
@@ -1246,7 +1160,7 @@ void Pixels::printString(int16_t xx, int16_t yy, String text, boolean clean, int
     setColor(fg);
 }
 
-int16_t Pixels::getTextLineHeight() {
+int16_t PixelsBase::getTextLineHeight() {
     if ( currentFont == NULL ) {
         return 0;
     }
@@ -1259,7 +1173,7 @@ int16_t Pixels::getTextLineHeight() {
     return pgm_read_byte_near(currentFont + 3);
 }
 
-int16_t Pixels::getTextBaseline() {
+int16_t PixelsBase::getTextBaseline() {
     if ( currentFont == NULL ) {
         return 0;
     }
@@ -1272,7 +1186,7 @@ int16_t Pixels::getTextBaseline() {
     return pgm_read_byte_near(currentFont + 4);
 }
 
-int16_t Pixels::getTextWidth(String text, int8_t kerning[]) {
+int16_t PixelsBase::getTextWidth(String text, int8_t kerning[]) {
     if ( currentFont == NULL ) {
         return 0;
     }
@@ -1330,7 +1244,7 @@ int16_t Pixels::getTextWidth(String text, int8_t kerning[]) {
 
 /* Low level */
 
-void Pixels::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
+void PixelsBase::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
     if ( x < 0 || x >= width || y < 0 || y >= height ) {
         return;
     }
@@ -1353,7 +1267,7 @@ void Pixels::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
     }
 }
 
-RGB Pixels::computeColor(RGB bg, double alpha) {
+RGB PixelsBase::computeColor(RGB bg, double alpha) {
     if ( alpha < 0 ) {
         alpha = 0;
         return bg;
@@ -1367,7 +1281,7 @@ RGB Pixels::computeColor(RGB bg, double alpha) {
     return RGB(sr, sg, sb);
 }
 
-RGB Pixels::computeColor(RGB fg, uint8_t opacity) {
+RGB PixelsBase::computeColor(RGB fg, uint8_t opacity) {
     int32_t sr = (int32_t)fg.red * (255 - opacity) + background.red * opacity;
     int32_t sg = (int32_t)fg.green * (255 - opacity) + background.green * opacity;
     int32_t sb = (int32_t)fg.blue * (255 - opacity) + background.blue * opacity;
@@ -1386,11 +1300,11 @@ RGB Pixels::computeColor(RGB fg, uint8_t opacity) {
     return RGB((uint8_t)sr, (uint8_t)sg, (uint8_t)sb);
 }
 
-void Pixels::scroll(int16_t dy, int8_t flags) {
+void PixelsBase::scroll(int16_t dy, int8_t flags) {
     scroll(dy, 0, deviceWidth, flags);
 }
 
-void Pixels::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
+void PixelsBase::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
 
     if(!canScroll()) {
         return;
@@ -1489,7 +1403,7 @@ void Pixels::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
 }
 
 
-void Pixels::drawPixel(int16_t x, int16_t y) {
+void PixelsBase::drawPixel(int16_t x, int16_t y) {
 
     if ( x < 0 || y < 0 || x >= width || y >= height ) {
         return;
@@ -1517,13 +1431,13 @@ void Pixels::drawPixel(int16_t x, int16_t y) {
         }
     }
 
-    CSELECT;
+    chipSelect();
     setRegion(x, y, x, y);
     setCurrentPixel(foreground);
-    CDESELECT;
+    chipDeselect();
 }
 
-void Pixels::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+void PixelsBase::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
     if (x2 < x1) {
         swap(x1, x2);
@@ -1634,23 +1548,23 @@ void Pixels::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
     quickFill(color, x1, y1, x2, y2);
 }
 
-void Pixels::hLine(int16_t x1, int16_t y, int16_t x2) {
+void PixelsBase::hLine(int16_t x1, int16_t y, int16_t x2) {
     fill(foreground.convertTo565(), x1, y, x2, y);
 }
 
-void Pixels::vLine(int16_t x, int16_t y1, int16_t y2) {
+void PixelsBase::vLine(int16_t x, int16_t y1, int16_t y2) {
     fill(foreground.convertTo565(), x, y1, x, y2);
 }
 
-void Pixels::resetRegion() {
+void PixelsBase::resetRegion() {
     setRegion(0, 0, deviceWidth, deviceHeight);
 }
 
-void Pixels::setCurrentPixel(int16_t color) {
+void PixelsBase::setCurrentPixel(int16_t color) {
     deviceWriteData(highByte(color), lowByte(color));
 }
 
-void Pixels::setCurrentPixel(RGB color) {
+void PixelsBase::setCurrentPixel(RGB color) {
     int16_t c = color.convertTo565();
     deviceWriteData(highByte(c), lowByte(c));
 }
