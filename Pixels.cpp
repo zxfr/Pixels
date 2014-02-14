@@ -16,6 +16,8 @@
 
 #include "Pixels.h"
 
+//#define DISABLE_ANTIALIASING 1
+
 RGB::RGB(uint8_t r, uint8_t g, uint8_t b) {
     red = r;
     green = g;
@@ -66,6 +68,7 @@ PixelsBase::PixelsBase(uint16_t width, uint16_t height) {
 void PixelsBase::setOrientation( uint8_t direction ){
 
     orientation = direction;
+    landscape = false;
 
     switch ( orientation ) {
     case LANDSCAPE_FLIP:
@@ -77,12 +80,10 @@ void PixelsBase::setOrientation( uint8_t direction ){
     case PORTRAIT_FLIP:
         width = deviceWidth;
         height = deviceHeight;
-        landscape = false;
         break;
     default:
         width = deviceWidth;
         height = deviceHeight;
-        landscape = false;
         orientation = PORTRAIT;
         break;
     }
@@ -106,9 +107,6 @@ void PixelsBase::clear() {
 }
 
 RGB PixelsBase::getPixel(int16_t x, int16_t y) {
-    if ( x < 0 || x >= width || y < 0 || y >= height ) {
-        return  getBackground();
-    }
     return getBackground();
 }
 
@@ -155,7 +153,7 @@ void PixelsBase::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
                     if (x == x2 && y == y2) {
                         break;
                     }
-                    e2 = 2 * err;
+                    e2 = err << 1;
                     if (e2 > -dy) {
                         err = err - dy;
                         x = x + sx;
@@ -185,19 +183,18 @@ void PixelsBase::fillRectangle(int16_t x, int16_t y, int16_t width, int16_t heig
     fill(foreground.convertTo565(), x, y, x+width-1, y+height-1);
 }
 
-void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
+void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius) {
 
-    if ( r < 1 ) {
+    if ( radius < 1 ) {
         drawRectangle(x, y, width, height);
         return;
     }
 
-    int16_t radius = r;
-    if ( radius > height / 2 ) {
-        radius = height/2;
+    if ( radius > height >> 2 ) {
+        radius = height >> 2;
     }
-    if ( radius > width / 2 ) {
-        radius = width/2;
+    if ( radius > width >> 1 ) {
+        radius = width >> 1;
     }
 
 #ifndef DISABLE_ANTIALIASING
@@ -205,16 +202,19 @@ void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
         drawRoundRectangleAntialiased(x, y, width, height, radius, radius, 0);
     } else {
 #endif
+        height--;
+        width--;
+
         hLine(x + radius, y + height, x + width - radius);
         hLine(x + radius, y, x + width - radius );
         vLine(x + width, y + radius, y + height - radius);
         vLine(x, y + radius, y + height - radius);
 
-        int16_t shiftX = width - radius * 2;
-        int16_t shiftY = height - radius * 2;
+        int16_t shiftX = width - (radius << 1);
+        int16_t shiftY = height - (radius << 1);
         int16_t f = 1 - radius;
         int16_t ddF_x = 1;
-        int16_t ddF_y = -radius * 2;
+        int16_t ddF_y = - (radius << 1);
         int16_t x1 = 0;
         int16_t y1 = radius;
 
@@ -245,19 +245,18 @@ void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
 #endif
 }
 
-void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t r) {
+void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius) {
 
-    if ( r < 1 ) {
+    if ( radius < 1 ) {
         fillRectangle(x, y, width, height);
         return;
     }
 
-    int16_t radius = r;
-    if ( radius > (height-1) / 2 ) {
-        radius = (height-1)/2;
+    if ( radius > height >> 1 ) {
+        radius = height >> 1;
     }
-    if ( radius > (width-1) / 2 ) {
-        radius = (width-1)/2;
+    if ( radius > width >> 1 ) {
+        radius = width >> 1;
     }
 
 #ifndef DISABLE_ANTIALIASING
@@ -266,21 +265,18 @@ void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
     }
 #endif
 
-    int16_t corr = 0;
-    for (int16_t j = 0; j < height; j++ ) {
-        if ( j < radius || j > height - radius ) {
-            corr = radius;
-        } else {
-            corr = 0;
-        }
-        hLine( x + corr, y + j, x + width-1 - corr );
-    }
+    fillRectangle(x + radius, y + height - radius, width - (radius << 1), radius);
+    fillRectangle(x, y + radius, width, height - (radius << 1));
+    fillRectangle(x + radius, y, width - (radius << 1), radius);
 
-    int16_t shiftX = width-1 - radius * 2;
-    int16_t shiftY = height-1 - radius * 2;
+    height--;
+    width--;
+
+    int16_t shiftX = width - (radius << 1);
+    int16_t shiftY = height - (radius << 1);
     int16_t f = 1 - radius;
     int16_t ddF_x = 1;
-    int16_t ddF_y = -radius * 2;
+    int16_t ddF_y = -(radius << 1);
     int16_t x1 = 0;
     int16_t y1 = radius;
 
@@ -311,71 +307,78 @@ void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
 
 void PixelsBase::drawCircle(int16_t x, int16_t y, int16_t r) {
 
-#ifndef DISABLE_ANTIALIASING
-    if ( antialiasing ) {
-        drawCircleAntialiaced(x, y, r, false);
-    } else {
-#endif
-        int16_t f = 1 - r;
-        int16_t ddF_x = 1;
-        int16_t ddF_y = -2 * r;
-        int16_t x1 = 0;
-        int16_t y1 = r;
+    drawOval(x-r, y-r, x+r, y-r);
 
-        drawPixel(x, y + r);
-        drawPixel(x, y - r);
-        drawPixel(x + r, y);
-        drawPixel(x - r, y);
+//#ifndef DISABLE_ANTIALIASING
+//    if ( antialiasing ) {
+//        drawCircleAntialiaced(x, y, r, false);
+//    } else {
+//#endif
+//        int16_t f = 1 - r;
+//        int16_t ddF_x = 1;
+//        int16_t ddF_y = -2 * r;
+//        int16_t x1 = 0;
+//        int16_t y1 = r;
 
-        while (x1 < y1) {
-            if (f >= 0) {
-                y1--;
-                ddF_y += 2;
-                f += ddF_y;
-            }
-            x1++;
-            ddF_x += 2;
-            f += ddF_x;
-            drawPixel(x + x1, y + y1);
-            drawPixel(x - x1, y + y1);
-            drawPixel(x + x1, y - y1);
-            drawPixel(x - x1, y - y1);
-            drawPixel(x + y1, y + x1);
-            drawPixel(x - y1, y + x1);
-            drawPixel(x + y1, y - x1);
-            drawPixel(x - y1, y - x1);
-        }
-#ifndef DISABLE_ANTIALIASING
-    }
-#endif
+//        drawPixel(x, y + r);
+//        drawPixel(x, y - r);
+//        drawPixel(x + r, y);
+//        drawPixel(x - r, y);
+
+//        while (x1 < y1) {
+//            if (f >= 0) {
+//                y1--;
+//                ddF_y += 2;
+//                f += ddF_y;
+//            }
+//            x1++;
+//            ddF_x += 2;
+//            f += ddF_x;
+//            drawPixel(x + x1, y + y1);
+//            drawPixel(x - x1, y + y1);
+//            drawPixel(x + x1, y - y1);
+//            drawPixel(x - x1, y - y1);
+//            drawPixel(x + y1, y + x1);
+//            drawPixel(x - y1, y + x1);
+//            drawPixel(x + y1, y - x1);
+//            drawPixel(x - y1, y - x1);
+//        }
+//#ifndef DISABLE_ANTIALIASING
+//    }
+//#endif
 }
 
 void PixelsBase::fillCircle(int16_t x, int16_t y, int16_t r) {
     int16_t yy;
     int16_t xx;
 
-#ifndef DISABLE_ANTIALIASING
-    if ( antialiasing ) {
-        drawCircleAntialiaced(x, y, r, true);
-    }
-#endif
+    fillOval(x-r, y-r, x+r, y-r);
 
-    for (yy = -r; yy <= r; yy++) {
-        for (xx = -r; xx <= r; xx++) {
-            if ((xx * xx) + (yy * yy) <= (r * r)) {
-                drawPixel(x+xx, y+yy);
-            }
-        }
-    }
+//#ifndef DISABLE_ANTIALIASING
+//    if ( antialiasing ) {
+//        drawCircleAntialiaced(x, y, r, true);
+//    }
+//#endif
+
+//    for (yy = -r; yy <= r; yy++) {
+//        for (xx = -r; xx <= r; xx++) {
+//            if ((xx * xx) + (yy * yy) <= (r * r)) {
+//                drawPixel(x+xx, y+yy);
+//            }
+//        }
+//    }
 }
 
 void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
 
 #ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
-        drawRoundRectangleAntialiased(x, y, width-1, height-1, (width-1)/2, (height-1)/2, 0);
+        drawRoundRectangleAntialiased(x, y, width, height, width/2, height/2, 0);
     } else {
 #endif
+        height--;
+        width--;
+
         int16_t ix, iy;
         int16_t h, i, j, k;
         int16_t oh, oi, oj, ok;
@@ -384,8 +387,8 @@ void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
         int16_t xmj, xpj, ymi, ypi;
         int16_t xmk, xpk, ymh, yph;
 
-        int16_t rx = (width-1) / 2;
-        int16_t ry = (height-1) / 2;
+        int16_t rx = width / 2;
+        int16_t ry = height / 2;
 
         int16_t xx = x + rx;
         int16_t yy = y + ry;
@@ -407,7 +410,7 @@ void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
 
         if (width > height) {
             ix = 0;
-            iy = rx * 64;
+            iy = rx << 6;
 
             do {
                 h = (ix + 32) >> 6;
@@ -452,7 +455,7 @@ void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
             } while (i > h);
         } else {
             ix = 0;
-            iy = ry * 64;
+            iy = ry << 6;
 
             do {
                 h = (ix + 32) >> 6;
@@ -503,8 +506,11 @@ void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
 
 void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
 
-    int16_t rx = (width-1)/2;
-    int16_t ry = (height-1)/2;
+    height--;
+    width--;
+
+    int16_t rx = width / 2;
+    int16_t ry = height / 2;
 
     int16_t x = xx + rx;
     int16_t y = yy + ry;
@@ -522,19 +528,19 @@ void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height)
     }
 
     if (width < 2) {
-        vLine(xx, yy, yy + height-1);
+        vLine(xx, yy, yy + height);
         return;
     }
 
     if (height < 2) {
-        hLine(xx, yy, xx + width-1);
+        hLine(xx, yy, xx + width);
         return;
     }
 
 
 #ifndef DISABLE_ANTIALIASING
     if ( antialiasing ) {
-        drawRoundRectangleAntialiased(x-rx, y-ry, rx*2, ry*2, rx, ry, true);
+        drawRoundRectangleAntialiased(x-rx, y-ry, rx<<1, ry<<1, rx, ry, true);
     }
 #endif
 
@@ -542,7 +548,7 @@ void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height)
 
     if (rx > ry) {
         ix = 0;
-        iy = rx * 64;
+        iy = rx << 6;
 
         do {
             h = (ix + 32) >> 6;
@@ -579,7 +585,7 @@ void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height)
         } while (i > h);
     } else {
         ix = 0;
-        iy = ry * 64;
+        iy = ry << 6;
 
         do {
             h = (ix + 32) >> 6;
@@ -686,6 +692,8 @@ void PixelsBase::drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t
 }
 
 void PixelsBase::drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+#ifdef ENABLE_FAT_LINES
+// the code still needs to be completed. Problems by line caps
 
     double wd = lineWidth;
 
@@ -732,6 +740,9 @@ void PixelsBase::drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int1
             break;
         }
     }
+#else
+    drawLineAntialiased(x1, y1, x2, y2);
+#endif
 }
 
 void PixelsBase::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, int16_t height, int16_t rx, int16_t ry, boolean bordermode) {
@@ -760,11 +771,11 @@ void PixelsBase::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t wid
     a2 = rx * rx;
     b2 = ry * ry;
 
-    ds = 2 * a2;
-    dt = 2 * b2;
+    ds = a2 << 1;
+    dt = b2 << 1;
 
-    xc2 = 2 * x;
-    yc2 = 2 * y;
+    xc2 = x << 1;
+    yc2 = y << 1;
 
     sab = sqrt((double)(a2 + b2));
     od = (int)round(sab*0.01) + 1;
@@ -789,7 +800,7 @@ void PixelsBase::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t wid
         if (d >= 0) {
             ys = yp - 1;
         } else if ((d - s - a2) > 0) {
-            if ((2 * d - s - a2) >= 0) {
+            if (((d << 1) - s - a2) >= 0) {
                 ys = yp + 1;
             } else {
                 ys = yp;
@@ -851,7 +862,7 @@ void PixelsBase::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t wid
         if (d <= 0) {
             xs = xp + 1;
         } else if ((d + t - b2) < 0) {
-            if ((2 * d + t - b2) <= 0) {
+            if (((d << 1) + t - b2) <= 0) {
                 xs = xp - 1;
             } else {
                 xs = xp;
@@ -900,7 +911,7 @@ void PixelsBase::drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t wid
 }
 
 void PixelsBase::drawCircleAntialiaced( int16_t x, int16_t y, int16_t radius, boolean bordermode )	{
-    drawRoundRectangleAntialiased(x-radius, y-radius, radius*2, radius*2, radius, radius, bordermode);
+    drawRoundRectangleAntialiased(x-radius, y-radius, radius<<1, radius<<1, radius, radius, bordermode);
 }
 
 #endif
@@ -1022,7 +1033,7 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                                 if ( clean ) {
                                     setColor(background.red, background.green, background.blue);
                                 } else {
-                                    uint8_t opacity = (0xff & (b * 4));
+                                    uint8_t opacity = (0xff & (b << 2));
                                     RGB cl = computeColor(fg, opacity);
                                     setColor(cl);
                                 }
@@ -1059,7 +1070,7 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                                 if ( clean ) {
                                     setColor(background.red, background.green, background.blue);
                                 } else {
-                                    uint8_t opacity = (0xff & (b * 4));
+                                    uint8_t opacity = (0xff & (b << 2));
                                     RGB cl = computeColor(fg, opacity);
                                     setColor(cl);
                                 }
@@ -1123,8 +1134,8 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                     } else {
                         for ( int16_t i = 0; i < length - 8; i++ ) {
                             int16_t b = 0xff & pgm_read_byte_near(currentFont + ptr + 8 + i);
-                            int16_t x = i * 8 % effWidth;
-                            int16_t y = i * 8 / effWidth;
+                            int16_t x = (i << 3) % effWidth;
+                            int16_t y = (i << 3) / effWidth;
                             for ( uint8_t j = 0; j < 8; j++ ) {
                                 if ( x + j == effWidth ) {
                                     x = -j;
@@ -1166,10 +1177,10 @@ int16_t PixelsBase::getTextLineHeight() {
         return 0;
     }
 
-    int16_t fontType = pgm_read_byte_near(currentFont + 2);
-    if ( fontType != ANTIALIASED_FONT && fontType != BITMASK_FONT ) {
-        return 0;
-    }
+//    int16_t fontType = pgm_read_byte_near(currentFont + 2);
+//    if ( fontType != ANTIALIASED_FONT && fontType != BITMASK_FONT ) {
+//        return 0;
+//    }
 
     return pgm_read_byte_near(currentFont + 3);
 }
@@ -1179,10 +1190,10 @@ int16_t PixelsBase::getTextBaseline() {
         return 0;
     }
 
-    int16_t fontType = pgm_read_byte_near(currentFont + 2);
-    if ( fontType != ANTIALIASED_FONT && fontType != BITMASK_FONT ) {
-        return 0;
-    }
+//    int16_t fontType = pgm_read_byte_near(currentFont + 2);
+//    if ( fontType != ANTIALIASED_FONT && fontType != BITMASK_FONT ) {
+//        return 0;
+//    }
 
     return pgm_read_byte_near(currentFont + 4);
 }
