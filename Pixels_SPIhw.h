@@ -20,6 +20,10 @@
 
 #include "Pixels.h"
 
+#ifdef PIXELS_MAIN
+#error Pixels_SPIhw.h must be included before Pixels_<CONTROLLER>.h
+#endif
+
 #ifndef PIXELS_SPIHW_H
 #define PIXELS_SPIHW_H
 
@@ -58,9 +62,6 @@ private:
 
     void beginSPI();
     void endSPI();
-    void setSPIBitOrder(uint8_t bitOrder);
-    void setSPIDataMode(uint8_t mode);
-    void setSPIClockDivider(uint8_t rate);
 
 protected:
     void reset() {
@@ -71,7 +72,7 @@ protected:
     }
 
     void writeCmd(uint8_t b);
-    void writeData(uint8_t data);
+    __attribute__((noinline)) void writeData(uint8_t data); // noinline saves 4-5kb sketch code in the case. Impact to performance to be learned.
 
     void writeData(uint8_t hi, uint8_t lo) {
         writeData(hi);
@@ -90,6 +91,10 @@ protected:
     }
 
 public:
+    void setSPIBitOrder(uint8_t bitOrder);
+    void setSPIDataMode(uint8_t mode);
+    void setSPIClockDivider(uint8_t rate);
+
     /**
      * Overrides SPI pins
      * @param scl

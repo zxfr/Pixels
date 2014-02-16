@@ -164,14 +164,12 @@ protected:
 
     virtual void scrollCmd() {};
 
-#ifndef DISABLE_ANTIALIASING
-    void drawCircleAntialiaced(int16_t x, int16_t y, int16_t radius, boolean bordermode);
-    void drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
-    void drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
-    void drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, int16_t height, int16_t rx, int16_t ry, boolean bordermode);
+    virtual void drawCircleAntialiaced(int16_t x, int16_t y, int16_t radius, boolean bordermode);
+    virtual void drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
+    virtual void drawLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
+    virtual void drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, int16_t height, int16_t rx, int16_t ry, boolean bordermode);
 
     int16_t* loadFileBytes(String);
-#endif
 
 public:
     /**
@@ -200,10 +198,14 @@ public:
     }
     /**
      * Enables or disables antialiasing by a drawing of graphical primitives. The metod does not impact antialiased fonts.
-     * Antialiased output in general requires more resources/time to output comparing to "grainy" output mode
+     * Antialiased output in general requires more resources/time to output comparing to "grainy" output mode.
+     * Takes no effect if Pixels_Antialiasing.h is not included
      * @param enable a boolean value that determines whether the antialiasing should be enabled or not
      */
-    void enableAntialiasing(boolean enable);
+    virtual void enableAntialiasing(boolean enable) {
+        antialiasing = false;
+    }
+
     /**
      * Gets the current antialiasing mode.
      * @return a boolean value that shows whether the antialiasing is be enabled or not

@@ -22,8 +22,14 @@
 
 #ifndef PIXELS_HX8352_H
 #define PIXELS_HX8352_H
+#define PIXELS_MAIN
+
+#if defined(PIXELS_ANTIALIASING_H)
+#define PixelsBase PixelsAntialiased
+#endif
 
 class Pixels : public PixelsBase
+
 #if defined(PIXELS_SPISW_H)
                                     ,SPIsw
 #elif defined(PIXELS_SPIHW_H)
@@ -58,6 +64,10 @@ public:
 
     void init();
 };
+
+#if defined(PIXELS_ANTIALIASING_H)
+#undef PixelsBase
+#endif
 
 void Pixels::init() {
 

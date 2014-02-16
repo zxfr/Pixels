@@ -20,6 +20,10 @@
 
 #include "Pixels.h"
 
+#ifdef PIXELS_MAIN
+#error Pixels_PPI8.h must be included before Pixels_<CONTROLLER>.h
+#endif
+
 #ifndef PIXELS_PPI8_H
 #define PIXELS_PPI8_H
 

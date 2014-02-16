@@ -20,6 +20,10 @@
 
 #include "Pixels.h"
 
+#ifdef PIXELS_MAIN
+#error Pixels_SPIsw.h must be included before Pixels_<CONTROLLER>.h
+#endif
+
 #ifndef PIXELS_SPISW_H
 #define PIXELS_SPISW_H
 
