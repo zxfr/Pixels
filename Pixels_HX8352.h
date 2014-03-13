@@ -31,13 +31,13 @@
 class Pixels : public PixelsBase
 
 #if defined(PIXELS_SPISW_H)
-                                    ,SPIsw
+                                    , public SPIsw
 #elif defined(PIXELS_SPIHW_H)
-                                    ,SPIhw
+                                    , public SPIhw
 #elif defined(PIXELS_PPI8_H)
-                                    ,PPI8
+                                    , public PPI8
 #elif defined(PIXELS_PPI16_H)
-                                    ,PPI16
+                                    , public PPI16
 #endif
 {
 protected:
