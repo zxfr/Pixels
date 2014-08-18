@@ -113,12 +113,12 @@ public:
 class PixelsBase {
 protected:
     /* device physical dimension in portrait orientation */
-    uint16_t deviceWidth;
-    uint16_t deviceHeight;
+    int16_t deviceWidth;
+    int16_t deviceHeight;
 
     /* device logical dimension in current orientation */
-    uint16_t width;
-    uint16_t height;
+    int16_t width;
+    int16_t height;
 
     boolean landscape;
 
@@ -248,14 +248,14 @@ public:
      * Returns device width.
      * @return device width.
      */
-    inline uint16_t getWidth() {
+    inline int16_t getWidth() {
         return width;
     }
     /**
      * Returns device height.
      * @return device height.
      */
-    inline uint16_t getHeight() {
+    inline int16_t getHeight() {
         return height;
     }
     /**

@@ -33,8 +33,11 @@
 #define DATADIRH DDRA
 #define DATADIRL DDRC
 #else
-#define DATAPORT PORTD
-#define DATADIR DDRD
+// shortage of pins for non-Mega boards
+#define DATAPORTH PORTD // 0-7
+#define DATAPORTL PORTB // 8-13
+#define DATADIRH DDRD
+#define DATADIRL DDRB
 #endif
 
 class PPI16 {

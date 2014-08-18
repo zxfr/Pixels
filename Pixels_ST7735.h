@@ -117,7 +117,7 @@ void Pixels::init() {
     writeData(0x0E);
 
     writeCmd(0x36);
-    writeData(0xC8);
+    writeData(0xC0); // 0xC8 - BGR
 
     writeCmd(0xe0);
     writeData(0x0f);

@@ -27,6 +27,8 @@
 #ifndef PIXELS_SPISW_H
 #define PIXELS_SPISW_H
 
+bool eightBit = true;
+
 class SPIsw {
 private:
     uint8_t pinSCL;
@@ -74,20 +76,25 @@ protected:
 public:
     void initInterface();
 
+//    void setSPIEightBit(bool bits) {
+//        eightBit = bits;
+//    }
+
     /**
      * Overrides SPI pins
      * @param scl
      * @param sda
      * @param cs chip select
      * @param rst reset
-     * @param wr write pin
+     * @param wr write pin; if not omitted (and not equals to 255) - switches to eight bit mode transfer
      */
-    inline void setSpiPins(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) {
+    inline void setSpiPins(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr = 255) {
         pinSCL = scl;
         pinSDA = sda;
         pinCS = cs;
         pinRST = rst;
         pinWR = wr;
+        eightBit = wr != 255;
     }
 
     /**
@@ -136,12 +143,24 @@ void SPIsw::busWrite(uint8_t data) {
 }
 
 void SPIsw::writeCmd(uint8_t cmd) {
-  *registerWR &= ~bitmaskWR;
-  busWrite(cmd);
+    if ( eightBit ) {
+        *registerWR &= ~bitmaskWR;
+    } else {
+        cbi(registerSDA, bitmaskSDA);
+        cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
+        sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
+    }
+    busWrite(cmd);
 }
 
 void SPIsw::writeData(uint8_t data) {
-  *registerWR |= bitmaskWR;
-  busWrite(data);
+    if ( eightBit ) {
+        *registerWR |= bitmaskWR;
+    } else {
+        sbi(registerSDA, bitmaskSDA);
+        cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
+        sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
+    }
+    busWrite(data);
 }
 #endif

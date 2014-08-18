@@ -57,7 +57,7 @@ public:
 
     Pixels(uint16_t width, uint16_t height) : PixelsBase( width, height) {
         scrollSupported = true;
-        setSpiPins(13, 11, 10, 7 ,9); // dummy code in PPI case
+        setSpiPins(13, 11, 10, 7 ,9); // dummy code in PPI case // uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr
         setPpiPins(38, 39, 40, 41, 0); // dummy code in SPI case
     }
 

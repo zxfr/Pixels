@@ -57,11 +57,15 @@ private:
 
     regtype *registerSCL;
     regtype *registerSDA;
+    regtype *registerWR;
     regsize bitmaskSCL;
     regsize bitmaskSDA;
+    regsize bitmaskWR;
 
     void beginSPI();
     void endSPI();
+
+    bool eightBit;
 
 protected:
     void reset() {
@@ -94,6 +98,9 @@ public:
     void setSPIBitOrder(uint8_t bitOrder);
     void setSPIDataMode(uint8_t mode);
     void setSPIClockDivider(uint8_t rate);
+//    void setSPIEightBit(bool bits) {
+//        eightBit = bits;
+//    }
 
     /**
      * Overrides SPI pins
@@ -101,16 +108,15 @@ public:
      * @param sda
      * @param cs chip select
      * @param rst reset
-     * @param wr write pin
+     * @param wr write pin; if not omitted (and not equals to 255) - switches to eight bit mode transfer
      */
-    inline void setSpiPins(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr) {
+    inline void setSpiPins(uint8_t scl, uint8_t sda, uint8_t cs, uint8_t rst, uint8_t wr = 255) {
         pinSCL = scl;
         pinSDA = sda;
         pinCS = cs;
         pinRST = rst;
         pinWR = wr;
-//        registerCS	= portOutputRegister(digitalPinToPort(cs));
-//        bitmaskCS	= digitalPinToBitMask(cs);
+        eightBit = wr != 255;
     }
 
     /**
@@ -131,6 +137,8 @@ void SPIhw::initInterface() {
     bitmaskSCL	= digitalPinToBitMask(pinSCL);
     registerSDA	= portOutputRegister(digitalPinToPort(pinSDA));
     bitmaskSDA	= digitalPinToBitMask(pinSDA);
+    registerWR	= portOutputRegister(digitalPinToPort(pinWR));
+    bitmaskWR	= digitalPinToBitMask(pinWR);
     registerCS	= portOutputRegister(digitalPinToPort(pinCS));
     bitmaskCS	= digitalPinToBitMask(pinCS);
 
@@ -149,24 +157,32 @@ void SPIhw::initInterface() {
 }
 
 void SPIhw::writeCmd(uint8_t cmd) {
-    SPCR &= ~_BV(SPE); // Disable SPI to get control of the SCK pin.
-    cbi(registerSDA, bitmaskSDA);
-    cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
-  //  delay(1);   // Insert extra time to the hight pulse, typically needed
-    sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
-    SPCR |= _BV(SPE);      // Enable SPI again
+    if ( eightBit ) {
+        *registerWR &= ~bitmaskWR;
+    } else {
+        SPCR &= ~_BV(SPE); // Disable SPI to get control of the SCK pin.
+        cbi(registerSDA, bitmaskSDA);
+        cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
+      //  delay(1);   // Insert extra time to the hight pulse, typically needed
+        sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
+        SPCR |= _BV(SPE);      // Enable SPI again
+    }
 
     SPDR = cmd;
     while (!(SPSR & _BV(SPIF)));
 }
 
 void SPIhw::writeData(uint8_t data) {
-    SPCR &= ~_BV(SPE); // Disable SPI to get control of the SCK pin.
-    sbi(registerSDA, bitmaskSDA);
-    cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
-  //  delay(1);   // Insert extra time to the hight pulse, typically needed
-    sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
-    SPCR |= _BV(SPE);      // Enable SPI again
+    if ( eightBit ) {
+        *registerWR |= bitmaskWR;
+    } else {
+        SPCR &= ~_BV(SPE); // Disable SPI to get control of the SCK pin.
+        sbi(registerSDA, bitmaskSDA);
+        cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
+      //  delay(1);   // Insert extra time to the hight pulse, typically needed
+        sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
+        SPCR |= _BV(SPE);      // Enable SPI again
+    }
 
     SPDR = data;
     while (!(SPSR & _BV(SPIF)));
