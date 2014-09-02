@@ -621,7 +621,7 @@ void PixelsBase::drawCircleAntialiaced( int16_t x, int16_t y, int16_t radius, bo
 /* TEXT */
 
 
-int16_t PixelsBase::setFont(prog_uchar font[]) {
+int PixelsBase::setFont(prog_uchar font[]) {
     int16_t p1 = pgm_read_byte_near(font + 0);
     int16_t p2 = pgm_read_byte_near(font + 1);
     if ( p1 != 'Z' || p2 != 'F' ) {

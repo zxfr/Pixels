@@ -76,7 +76,7 @@ protected:
     }
 
     void writeCmd(uint8_t b);
-    __attribute__((noinline)) void writeData(uint8_t data); // noinline saves 4-5kb sketch code in the case. Impact to performance to be learned.
+    __attribute__((noinline)) void writeData(uint8_t data); // noinline saves 4-5kb sketch code in the case. An impact to performance is to be learned.
 
     void writeData(uint8_t hi, uint8_t lo) {
         writeData(hi);
@@ -168,8 +168,14 @@ void SPIhw::writeCmd(uint8_t cmd) {
         SPCR |= _BV(SPE);      // Enable SPI again
     }
 
+#if defined(TEENSYDUINO)
+    SPI0_SR = SPI_SR_TCF;
+    SPI0_PUSHR = cmd;
+    while (!(SPI0_SR & SPI_SR_TCF)) ; // wait
+#else
     SPDR = cmd;
     while (!(SPSR & _BV(SPIF)));
+#endif
 }
 
 void SPIhw::writeData(uint8_t data) {
@@ -184,8 +190,14 @@ void SPIhw::writeData(uint8_t data) {
         SPCR |= _BV(SPE);      // Enable SPI again
     }
 
+#if defined(TEENSYDUINO)
+    SPI0_SR = SPI_SR_TCF;
+    SPI0_PUSHR = data;
+    while (!(SPI0_SR & SPI_SR_TCF)) ; // wait
+#else
     SPDR = data;
     while (!(SPSR & _BV(SPIF)));
+#endif
 }
 
 void SPIhw::beginSPI() {
@@ -198,6 +210,16 @@ void SPIhw::beginSPI() {
   // the SS pin MUST be kept as OUTPUT.
   SPCR |= _BV(MSTR);
   SPCR |= _BV(SPE);
+
+#if defined(TEENSYDUINO)
+  uint32_t ctar = SPI_CTAR_FMSZ(7) |
+          SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0) | SPI_CTAR_DBR;
+
+  SPI0_MCR = SPI_MCR_MDIS | SPI_MCR_HALT | SPI_MCR_PCSIS(0x1F);
+  SPI0_CTAR0 = ctar;
+  SPI0_CTAR1 = ctar | SPI_CTAR_FMSZ(8);
+  SPI0_MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F);
+#endif
 }
 
 void SPIhw::endSPI() {

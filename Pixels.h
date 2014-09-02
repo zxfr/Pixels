@@ -29,7 +29,7 @@
 
 // #define DISABLE_ANTIALIASING 1
 
-#if defined(__AVR__)
+#if defined(__AVR__) || defined(TEENSYDUINO)
     #include <Arduino.h>
 
     #define regtype volatile uint8_t
@@ -39,7 +39,6 @@
     #define sbi(reg, bitmask) *reg |= bitmask
     #define pulse_high(reg, bitmask) sbi(reg, bitmask); cbi(reg, bitmask);
     #define pulse_low(reg, bitmask) cbi(reg, bitmask); sbi(reg, bitmask);
-
 
 #elif defined(__SAM3X8E__)
     #include <Arduino.h>
@@ -85,7 +84,7 @@
 #define PORTRAIT_FLIP 2
 #define LANDSCAPE_FLIP 3
 
-#define ipart(X) ((uint16_t)(X))
+#define ipart(X) ((int16_t)(X))
 #define round(X) ((uint16_t)(((double)(X))+0.5))
 #define fpart(X) (((double)(X))-(double)ipart(X))
 #define rfpart(X) (1.0-fpart(X))
@@ -492,7 +491,7 @@ public:
      * @param    height   the height of the image.
      * @see      loadBitmap(int16_t,int16_t,int16_t,int16_t,String)
      */
-    int8_t drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, int data[]);
+    int8_t drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, int16_t* data);
     /**
      * Loads from an external FAT-drive and draws specified bitmap image.
      * The image is drawn with its top-left corner at
