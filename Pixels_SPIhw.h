@@ -208,6 +208,7 @@ void SPIhw::beginSPI() {
   // Warning: if the SS pin ever becomes a LOW INPUT then SPI
   // automatically switches to Slave, so the data direction of
   // the SS pin MUST be kept as OUTPUT.
+
   SPCR |= _BV(MSTR);
   SPCR |= _BV(SPE);
 
@@ -219,6 +220,9 @@ void SPIhw::beginSPI() {
   SPI0_CTAR0 = ctar;
   SPI0_CTAR1 = ctar | SPI_CTAR_FMSZ(8);
   SPI0_MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F);
+#else
+  DDRB = DDRB | B00000001; // PB0 as OUTPUT
+  PORTB = PORTB | B00000001; // PB0 as HIGH
 #endif
 }
 
