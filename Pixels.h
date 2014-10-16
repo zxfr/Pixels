@@ -491,7 +491,19 @@ public:
      * @param    height   the height of the image.
      * @see      loadBitmap(int16_t,int16_t,int16_t,int16_t,String)
      */
-    int8_t drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, int16_t* data);
+    int8_t drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, prog_uint16_t* data);
+    /**
+     * Draws specified bitmap image.
+     * The image is drawn with its top-left corner at
+     * (<i>x</i>,&nbsp;<i>y</i>) in the current coordinate
+     * space.
+     * @param    data compressed (with Pixelmeister) bitmap image bytes. This method does
+     *               nothing if <code>img</code> is null.
+     * @param    x   the <i>x</i> coordinate.
+     * @param    y   the <i>y</i> coordinate.
+     * @see      drawBitmap(int16_t,int16_t,int16_t,int16_t,int[])
+     */
+    int8_t drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data);
     /**
      * Loads from an external FAT-drive and draws specified bitmap image.
      * The image is drawn with its top-left corner at
@@ -582,6 +594,79 @@ public:
      * @return text baseline offset
      */
     int16_t getTextWidth(String text, int8_t kerning[] = NULL);
+};
+
+class BitStream {
+private:
+    uint8_t* data;
+    size_t size;
+    int32_t bitpos;
+
+public:
+    BitStream (uint8_t* src_buffer, size_t byte_size, int8_t offset = 0) {
+        bitpos = offset;
+        data = src_buffer;
+        size = byte_size + (offset>>3);
+    }
+
+    bool endOfData() {
+        return ((bitpos + 1) >> 3) >= size;
+    }
+
+    uint8_t testCurrentByte() {
+        uint8_t res = (uint8_t)pgm_read_byte_near(data + (bitpos>>3));
+        return res;
+    }
+
+    uint8_t readBit() {
+        uint8_t res = (uint8_t)(pgm_read_byte_near(data + (bitpos>>3)) & (uint8_t)( (uint16_t)0x80 >> (bitpos & 7) ));
+        bitpos++;
+        return res;
+    }
+
+    uint8_t readBits(uint8_t len) {
+
+        uint16_t end_offset = (bitpos + len - 1)>>3;
+        if ( end_offset >= size ) {
+            return 0;
+        }
+
+        uint8_t i;
+        uint16_t byte_offset = bitpos >> 3;
+        if (byte_offset == end_offset) {
+            uint16_t x = pgm_read_byte_near(data + byte_offset);
+            i = (uint8_t)(x >> (8 - ((bitpos & 7) + len))) & ((1 << len) - 1);
+        } else {
+            uint16_t x = ((uint16_t)pgm_read_byte_near(data + byte_offset) << 8) + pgm_read_byte_near(data + end_offset);
+            i = (uint8_t)(x >> (16 - ((bitpos & 7) + len))) & ((1 << len) - 1);
+        }
+        bitpos += len;
+        return i;
+    }
+
+    uint16_t readNumber() {
+        int16_t count;
+
+        int8_t ctr = 1;
+        int16_t base = 2;
+        do {
+            if ( readBit() == 0 ) {
+                uint8_t bits = readBits(ctr);
+                count = base + bits;
+                break;
+            } else {
+                ctr++;
+                base *= 2;
+                if ( ctr == 7 ) {
+                    uint8_t bits = readBits(ctr);
+                    count = base + bits;
+                    break;
+                }
+            }
+        } while ( true );
+
+        return (uint16_t)count;
+    }
 };
 
 #endif

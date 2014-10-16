@@ -31,6 +31,7 @@ fillOval	KEYWORD2
 fillRectangle	KEYWORD2
 fillRoundRectangle	KEYWORD2
 drawBitmap	KEYWORD2
+drawCompressedBitmap	KEYWORD2
 loadBitmap	KEYWORD2
 scroll	KEYWORD2
 setFont	KEYWORD2

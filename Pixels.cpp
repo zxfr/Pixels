@@ -590,21 +590,225 @@ void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height)
     }
 }
 
-int8_t PixelsBase::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, int16_t* data) {
-    setRegion(x, y, x+width, y+height);
-    int16_t ptr = 0;
-    for ( int16_t j = 0; j < height; j++ ) {
-        for ( int16_t i = 0; i < width; i++ ) {
-            int16_t px = data[ptr++];
-            setCurrentPixel(px);
+int8_t PixelsBase::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, prog_uint16_t* data) {
+    chipSelect();
+    setRegion(x, y, x+width-1, y+height-1);
+
+    switch( orientation ) {
+    case PORTRAIT:
+        {
+            int32_t ptr = 0;
+            int32_t size = width * height;
+            while ( ptr++ < size ) {
+                int16_t px = pgm_read_word_near(data + ptr);
+                setCurrentPixel(px);
+            }
         }
+        break;
+    case LANDSCAPE_FLIP:
+        for ( int16_t i = width - 1; i >= 0; i-- ) {
+            for ( int16_t j = 0; j < height; j++ ) {
+                int16_t px = pgm_read_word_near(data + j * width + i);
+                setCurrentPixel(px);
+            }
+        }
+        break;
+    case LANDSCAPE:
+        for ( int16_t i = 0; i < width; i++ ) {
+            for ( int16_t j = height - 1; j >= 0; j-- ) {
+                int16_t px = pgm_read_word_near(data + j * width + i);
+                setCurrentPixel(px);
+            }
+        }
+        break;
+    case PORTRAIT_FLIP:
+        {
+            int32_t ptr = width * height;
+            while ( ptr-- >= 0 ) {
+                int16_t px = pgm_read_word_near(data + ptr);
+                setCurrentPixel(px);
+            }
+        }
+
+        break;
     }
+
+    chipDeselect();
     return 0;
 }
 
+int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data) {
+
+    if ( data == NULL ) {
+        return -1;
+    }
+
+    if ( pgm_read_byte_near(data + 0) != 'Z' ) {
+        // Unknown compression method
+        return -2;
+    }
+
+    int32_t compressedLen = ((0xFF & (int32_t)pgm_read_byte_near(data + 1)) << 16) + ((0xFF & (int32_t)pgm_read_byte_near(data + 2)) << 8) + (0xFF & (int32_t)pgm_read_byte_near(data + 3));
+    if ( compressedLen < 0 ) {
+        // Unknown compression method or compressed data inconsistence
+        return -3;
+    }
+
+    int32_t resultLen = ((0xFF & (int32_t)pgm_read_byte_near(data + 4)) << 16) + ((0xFF & (int32_t)pgm_read_byte_near(data + 5)) << 8) + (0xFF & (int32_t)pgm_read_byte_near(data + 6));
+    if ( resultLen < 0 ) {
+        // Unknown compression method or compression format error
+        return resultLen;
+    }
+
+    uint8_t windowLen = 0xFF & (int16_t)pgm_read_byte_near(data + 7);
+    if ( windowLen < 0 || windowLen > 254 ) {
+        // corrupted content
+        return -5;
+    }
+
+    int16_t width = ((0xFF & (int32_t)pgm_read_byte_near(data + 8)) << 8) + (0xFF & (int32_t)pgm_read_byte_near(data + 9));
+    if ( width < 0 ) {
+        // Unknown compression method or compression format error (width parameter is invalid)
+        return -6;
+    }
+
+    int16_t height = ((0xFF & (int32_t)pgm_read_byte_near(data + 10)) << 8) + (0xFF & (int32_t)pgm_read_byte_near(data + 11));
+    if ( height < 0 ) {
+        // Unknown compression method or compression format error (height parameter is invalid)
+        return -7;
+    }
+
+    uint8_t window[windowLen];
+    int16_t wptr = 0;
+
+    int32_t ctr = 0;
+
+    uint8_t buf;
+    bool bufEmpty = true;
+
+    int* raster;
+    int rasterPtr = 0;
+    int rasterLine = 0;
+
+    if ( orientation != PORTRAIT ) {
+        raster = new int[width];
+    }
+
+    chipSelect();
+
+    if( orientation == PORTRAIT ) {
+        setRegion(x, y, x + width - 1, y + height - 1);
+    } else {
+        rasterLine = y;
+    }
+
+    BitStream bs( data, compressedLen, 96 );
+    while ( true ) {
+
+        uint8_t bit = bs.readBit();
+        if ( bit == 0 ) { // literal
+            uint8_t bits = bs.readBits(8);
+            if ( bufEmpty ) {
+                buf = bits;
+                bufEmpty = false;
+            } else {
+                uint16_t px = buf;
+                px <<= 8;
+                px |= bits;
+                if ( orientation == PORTRAIT ) {
+                    setCurrentPixel(px);
+                } else {
+                    raster[rasterPtr++] = px;
+                    if ( rasterPtr == width ) {
+                        setRegion(x, rasterLine, x + width - 1, rasterLine);
+                        rasterLine++;
+                        if( orientation == LANDSCAPE ) {
+                            for ( int i = 0; i < width; i++ ) {
+                                setCurrentPixel(raster[i]);
+                            }
+                        } else {
+                            for ( int i = width - 1; i >= 0; i-- ) {
+                                setCurrentPixel(raster[i]);
+                            }
+                        }
+                        rasterPtr = 0;
+                    }
+                }
+                bufEmpty = true;
+            }
+            ctr++;
+            window[wptr++] = bits;
+            if ( wptr >= windowLen ) {
+                wptr -= windowLen;
+            }
+        } else {
+            uint8_t offset = (uint8_t)bs.readNumber() - 1;
+            uint8_t matchCount = (uint8_t)bs.readNumber() - 1;
+
+            while( matchCount-- > 0 ) {
+                int16_t p1 = wptr - offset;
+                while ( p1 < 0 ) {
+                    p1 += windowLen;
+                }
+                while ( p1 >= windowLen ) {
+                    p1 -= windowLen;
+                }
+                int16_t p2 = wptr;
+                while ( p2 >= windowLen ) {
+                    p2 -= windowLen;
+                }
+                wptr++;
+                ctr++;
+
+                if ( bufEmpty ) {
+                    buf = window[p1];
+                    bufEmpty = false;
+                } else {
+                    uint16_t px = buf;
+                    px <<= 8;
+                    px |= window[p1];
+                    if ( orientation == PORTRAIT ) {
+                        setCurrentPixel(px);
+                    } else {
+                        raster[rasterPtr++] = px;
+                        if ( rasterPtr == width ) {
+                            setRegion(x, rasterLine, x + width - 1, rasterLine);
+                            rasterLine++;
+                            if( orientation == LANDSCAPE ) {
+                                for ( int i = 0; i < width; i++ ) {
+                                    setCurrentPixel(raster[i]);
+                                }
+                            } else {
+                                for ( int i = width - 1; i >= 0; i-- ) {
+                                    setCurrentPixel(raster[i]);
+                                }
+                            }
+                            rasterPtr = 0;
+                        }
+                    }
+                    bufEmpty = true;
+                }
+                window[p2] = window[p1];
+            }
+
+            while ( wptr >= windowLen ) {
+                wptr -= windowLen;
+            }
+        }
+        if ( ctr > resultLen ) {
+            break;
+        }
+    }
+
+    chipDeselect();
+
+    return 0;
+}
+
+
 int8_t PixelsBase::loadBitmap(int16_t x, int16_t y, int16_t sx, int16_t sy, String path) {
     int16_t* data = loadFileBytes( path );
-    return drawBitmap(x, y, sx, sy, data);
+    return 0; // drawBitmap(x, y, sx, sy, data);
 }
 
 /*  -------   Antialiasing ------- */
@@ -709,27 +913,29 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                         int16_t marginBottom = marginRight;
                         int16_t effHeight = glyphHeight - marginTop - marginBottom;
 
+                        int16_t y = 0;
                         for ( int16_t i = 0; i < length - 8; i++ ) {
                             int16_t b = 0xff & pgm_read_byte_near(currentFont + ptr + 8 + i);
                             int16_t x = ctr / effHeight;
-                            int16_t y = ctr % effHeight;
 
                             if ( (0xc0 & b) > 0 ) {
+                                int16_t yt = y;
                                 int16_t len = 0x3f & b;
                                 ctr += len;
+                                y += len;
                                 if ( (0x80 & b) > 0 ) {
                                     if ( clean ) {
                                         setColor(background.red, background.green, background.blue);
                                     } else {
                                         setColor(fg.red, fg.green, fg.blue);
                                     }
-                                    while ( y + len > effHeight ) {
-                                        vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + effHeight - 1);
-                                        len -= effHeight - y;
-                                        y = 0;
+                                    while ( yt + len > effHeight ) {
+                                        vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + effHeight - 1);
+                                        len -= effHeight - yt;
+                                        yt = 0;
                                         x++;
                                     }
-                                    vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + y + len - 1);
+                                    vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + yt + len - 1);
                                 }
                             } else {
                                 if ( clean ) {
@@ -741,32 +947,38 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                                 }
                                 drawPixel(x1 + marginLeft + x, yy + marginTop + y);
                                 ctr++;
+                                y++;
+                            }
+                            while ( y >= effHeight ) {
+                                y -= effHeight;
                             }
                         }
 
                     } else {
 
+                        int16_t x = 0;
                         for ( int16_t i = 0; i < length - 8; i++ ) {
                             int16_t b = 0xff & pgm_read_byte_near(currentFont + ptr + 8 + i);
-                            int16_t x = ctr % effWidth;
                             int16_t y = ctr / effWidth;
 
                             if ( (0xc0 & b) > 0 ) {
+                                int16_t xt = x;
                                 int16_t len = 0x3f & b;
                                 ctr += len;
+                                x += len;
                                 if ( (0x80 & b) > 0 ) {
                                     if ( clean ) {
                                         setColor(background.red, background.green, background.blue);
                                     } else {
                                         setColor(fg.red, fg.green, fg.blue);
                                     }
-                                    while ( x + len > effWidth ) {
-                                        hLine(x1 + marginLeft + x, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
-                                        len -= effWidth - x;
-                                        x = 0;
+                                    while ( xt + len > effWidth ) {
+                                        hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
+                                        len -= effWidth - xt;
+                                        xt = 0;
                                         y++;
                                     }
-                                    hLine(x1 + marginLeft + x, yy + marginTop + y, x1 + marginLeft + x + len - 1);
+                                    hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + xt + len - 1);
                                 }
                             } else {
                                 if ( clean ) {
@@ -778,6 +990,10 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                                 }
                                 drawPixel(x1 + marginLeft + x, yy + marginTop + y);
                                 ctr++;
+                                x++;
+                            }
+                            while ( x >= effWidth ) {
+                                x -= effWidth;
                             }
                         }
                     }
@@ -796,56 +1012,78 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                         if ( vraster ) {
                             int16_t marginBottom = marginRight;
                             int16_t effHeight = glyphHeight - marginTop - marginBottom;
-
+                            int16_t y = 0;
                             for ( int16_t i = 0; i < length - 8; i++ ) {
                                 int16_t len = 0x7f & pgm_read_byte_near(currentFont + ptr + 8 + i);
                                 boolean color = (0x80 & pgm_read_byte_near(currentFont + ptr + 8 + i)) > 0;
                                 if ( color ) {
                                     int16_t x = ctr / effHeight;
-                                    int16_t y = ctr % effHeight;
-                                    while ( y + len > effHeight ) {
-                                        vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + effHeight);
-                                        len -= effHeight - y;
-                                        ctr += effHeight - y;
-                                        y = 0;
+                                    int16_t yt = y;
+                                    while ( yt + len > effHeight ) {
+                                        vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + effHeight);
+                                        int16_t dy = effHeight - yt;
+                                        len -= dy;
+                                        ctr += dy;
+                                        y += dy;
+                                        yt = 0;
                                         x++;
                                     }
-                                    vLine(x1 + marginLeft + x, yy + marginTop + y, yy + marginTop + y + len);
+                                    vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + yt + len);
                                 }
                                 ctr += len;
+                                y += len;
+                                while ( y >= effHeight ) {
+                                    y -= effHeight;
+                                }
                             }
                         } else {
+                            int16_t x = 0;
                             for ( int16_t i = 0; i < length - 8; i++ ) {
                                 int16_t len = 0x7f & pgm_read_byte_near(currentFont + ptr + 8 + i);
                                 boolean color = (0x80 & pgm_read_byte_near(currentFont + ptr + 8 + i)) > 0;
+                                int16_t xt = x;
+                                int16_t y = ctr / effWidth;
                                 if ( color ) {
-                                    int16_t x = ctr % effWidth;
-                                    int16_t y = ctr / effWidth;
-                                    while ( x + len > effWidth ) {
-                                        hLine(x1 + marginLeft + x, yy + marginTop + y, x1 + marginLeft + effWidth);
-                                        len -= effWidth - x;
-                                        ctr += effWidth - x;
-                                        x = 0;
+                                    while ( xt + len > effWidth ) {
+                                        hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + effWidth);
+                                        int16_t dx = effWidth - xt;
+                                        len -= dx;
+                                        ctr += dx;
+                                        x += dx;
+                                        xt = 0;
                                         y++;
                                     }
-                                    hLine(x1 + marginLeft + x, yy + marginTop + y, x1 + marginLeft + x + len);
+                                    hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + xt + len);
                                 }
                                 ctr += len;
+                                x += len;
+                                while ( x >= effWidth ) {
+                                    x -= effWidth;
+                                }
                             }
                         }
                     } else {
-                        for ( int16_t i = 0; i < length - 8; i++ ) {
+
+                        int16_t x = 0;
+                        int16_t offset = 0;
+                        for ( int16_t i = 0; i < length - 8; i++, offset += 8, x += 8 ) {
                             int16_t b = 0xff & pgm_read_byte_near(currentFont + ptr + 8 + i);
-                            int16_t x = (i << 3) % effWidth;
-                            int16_t y = (i << 3) / effWidth;
+
+                            while ( x >= effWidth ) {
+                                x -= effWidth;
+                            }
+
+                            int16_t xt = x;
+                            int16_t y = offset / effWidth;
+
                             for ( uint8_t j = 0; j < 8; j++ ) {
-                                if ( x + j == effWidth ) {
-                                    x = -j;
+                                if ( xt + j == effWidth ) {
+                                    xt = -j;
                                     y++;
                                 }
                                 int16_t mask = 1 << (7 - j);
                                 if ( (b & mask) == 0 ) {
-                                    vLine(x1 + marginLeft + x + j, yy + marginTop + y, yy + marginTop + y + 1);
+                                    vLine(x1 + marginLeft + xt + j, yy + marginTop + y, yy + marginTop + y + 1);
                                 }
                             }
                         }
@@ -1142,9 +1380,15 @@ void PixelsBase::drawPixel(int16_t x, int16_t y) {
         }
     } else {
         if ( landscape ) {
-            x = (x + deviceHeight + currentScroll) % deviceHeight;
+            x = (x + deviceHeight + currentScroll);
+            while (x > deviceHeight ) {
+                x -= deviceHeight;
+            }
         } else {
-            y = (y + deviceHeight + currentScroll) % deviceHeight;
+            y = (y + deviceHeight + currentScroll);
+            while (y > deviceHeight ) {
+                y -= deviceHeight;
+            }
         }
     }
 
