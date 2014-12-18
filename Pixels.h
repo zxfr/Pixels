@@ -144,6 +144,8 @@ protected:
     boolean scrollCleanMode;
 
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
+    void drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t yy,
+                               int16_t height, prog_uchar* data, int16_t ptr, int16_t length);
 
     virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
     void setCurrentPixel(RGB color);
@@ -504,6 +506,28 @@ public:
      * @see      drawBitmap(int16_t,int16_t,int16_t,int16_t,int[])
      */
     int8_t drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data);
+    /**
+     * Draws an icon, prepared with Pixelmeister.
+     * The icon is drawn with its top-left corner at
+     * (<i>x</i>,&nbsp;<i>y</i>) in the current coordinate
+     * space.
+     * @param    data icon image bytes. This method does
+     *               nothing if <code>data</code> is null.
+     * @param    x   the <i>x</i> coordinate.
+     * @param    y   the <i>y</i> coordinate.
+     */
+    void drawIcon(int16_t xx, int16_t yy, prog_uchar data[]);
+    /**
+     * Paint icon pixels with background color. The icon should be in Pixelmeister format.
+     * The icon is drawn with its top-left corner at
+     * (<i>x</i>,&nbsp;<i>y</i>) in the current coordinate
+     * space.
+     * @param    data icon image bytes. This method does
+     *               nothing if <code>data</code> is null.
+     * @param    x   the <i>x</i> coordinate.
+     * @param    y   the <i>y</i> coordinate.
+     */
+    void cleanIcon(int16_t xx, int16_t yy, prog_uchar data[]);
     /**
      * Loads from an external FAT-drive and draws specified bitmap image.
      * The image is drawn with its top-left corner at
