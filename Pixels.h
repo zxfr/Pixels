@@ -24,6 +24,17 @@
  * More platforms coming soon
  */
 
+
+
+/*
+ * Added support for Arduino Due including the 1.5.8 IDE
+ * Currently tested with Arduino Due + TFT320QVT (SSD1289) + TFT Mega Shield V1.1 by Lseeduino (you can also hook it directly to the Due) 
+ *
+ * Collaborator: CMBSolutions
+ * Date: December, 20 2014
+ * Contact: git@cmbsolutions.nl
+ */                                                                    
+
 #ifndef PIXELS_BASE_H
 #define PIXELS_BASE_H
 
@@ -40,20 +51,42 @@
     #define pulse_high(reg, bitmask) sbi(reg, bitmask); cbi(reg, bitmask);
     #define pulse_low(reg, bitmask) cbi(reg, bitmask); sbi(reg, bitmask);
 
-#elif defined(__SAM3X8E__)
-    #include <Arduino.h>
-    #define PROGMEM
-    #define prog_uchar const unsigned char
-    #define pgm_read_byte(x)        (*((char *)x))
-    #define pgm_read_word(x)        ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x)))
-    #define pgm_read_byte_near(x)   (*((char *)x))
-    #define pgm_read_byte_far(x)    (*((char *)x))
-//  #define pgm_read_word(x)        (*((short *)(x & 0xfffffffe)))
-//  #define pgm_read_word_near(x)   (*((short *)(x & 0xfffffffe))
-//  #define pgm_read_word_far(x)    (*((short *)(x & 0xfffffffe)))
-    #define pgm_read_word_near(x)   ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x)))
-    #define pgm_read_word_far(x)    ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x))))
-    #define PSTR(x)  x
+	#define swap(a, b) {int16_t buf = a; a = b; b = buf;} // Used by avr
+
+#elif defined(__SAM3X8E__) // Everything changed here, this is all used for the due
+	#include <Arduino.h>
+	
+	// existing code
+	#define PROGMEM
+	#define prog_uchar const unsigned char
+	#define pgm_read_byte(x)        (*((char *)x))
+	#define pgm_read_word(x)        ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x)))
+	#define pgm_read_byte_near(x)   (*((char *)x))
+	#define pgm_read_byte_far(x)    (*((char *)x))
+	#define pgm_read_word_near(x)   ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x)))
+	#define pgm_read_word_far(x)    ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x))))
+	#define PSTR(x)  x
+
+	// Cloned these from AVR, could define only once, but find this more understandable.
+	#define cbi(reg, bitmask) *reg &= ~bitmask
+	#define sbi(reg, bitmask) *reg |= bitmask
+	#define pulse_high(reg, bitmask) sbi(reg, bitmask); cbi(reg, bitmask);
+	#define pulse_low(reg, bitmask) cbi(reg, bitmask); sbi(reg, bitmask);
+
+	// Not sure why they are needed, but without them it doesn't work :)
+	#define cport(port, data) port &= data
+	#define sport(port, data) port |= data
+
+	// Important to leave this define alone, unless you found a way to use the same "swap" on avr and arm (arm has 3 params)
+	#define dueSwap 1
+	#define swap(type, i, j) {type t = i; i = j; j = t;}
+
+	#define fontbyte(x) cfont.font[x]  
+	#define pgm_read_word(data) *data
+	#define pgm_read_byte(data) *data
+	#define bitmapdatatype unsigned short*
+	#define regtype volatile uint32_t
+	#define regsize uint32_t
 #else
     #define PROGMEM
     #define prog_uchar byte
@@ -62,7 +95,7 @@
     #define regsize uint16_t
 #endif
 
-#define swap(a, b) {int16_t buf = a; a = b; b = buf;}
+
 
 #define BITMASK_FONT 1
 #define ANTIALIASED_FONT 2

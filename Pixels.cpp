@@ -14,6 +14,15 @@
  * - K. Townsend http://microBuilder.eu (lpc1343codebase Project)
  */
 
+/*
+* Added support for Arduino Due including the 1.5.8 IDE
+* Currently tested with Arduino Due + TFT320QVT (SSD1289) + TFT Mega Shield V1.1 by Lseeduino (you can also hook it directly to the Due)
+*
+* Collaborator: CMBSolutions
+* Date: December, 20 2014
+* Contact: git@cmbsolutions.nl
+*/
+
 #include "Pixels.h"
 
 RGB::RGB(uint8_t r, uint8_t g, uint8_t b) {
@@ -1437,11 +1446,19 @@ void PixelsBase::drawPixel(int16_t x, int16_t y) {
 void PixelsBase::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
     if (x2 < x1) {
-        swap(x1, x2);
+#if defined(dueSwap)
+		swap(int16_t, x1, x2);
+#else
+		swap(x1, x2);
+#endif
     }
 
     if (y2 < y1) {
-        swap(y1, y2);
+#if defined(dueSwap)
+		swap(int16_t, y1, y2);
+#else
+		swap(y1, y2);
+#endif
     }
 
     if ( x1 >= width ) {

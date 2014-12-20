@@ -13,6 +13,15 @@
  * - Andreas Schiffler -- aschiffler at ferzkopp dot net (SDL_gfx Project)
  * - K. Townsend http://microBuilder.eu (lpc1343codebase Project)
  */
+ 
+ /*
+* Added support for Arduino Due including the 1.5.8 IDE
+* Currently tested with Arduino Due + TFT320QVT (SSD1289) + TFT Mega Shield V1.1 by Lseeduino (you can also hook it directly to the Due)
+*
+* Collaborator: CMBSolutions
+* Date: December, 20 2014
+* Contact: git@cmbsolutions.nl
+*/
 
 /*
  * Pixels port to SSD1289 controller, PPI16 mode (TFT_320QVT)
@@ -202,10 +211,18 @@ void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
         }
 
         if (x2 < x1) {
-            swap(x1, x2);
+#if defined(dueSwap)
+			swap(int16_t, x1, x2);
+#else
+			swap(x1, x2);
+#endif
         }
         if (y2 < y1) {
-            swap(y1, y2);
+#if defined(dueSwap)
+			swap(int16_t, y1, y2);
+#else
+			swap(y1, y2);
+#endif
         }
     }
 

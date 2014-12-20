@@ -15,29 +15,40 @@
  */
 
 /*
+* Added support for Arduino Due including the 1.5.8 IDE
+* Currently tested with Arduino Due + TFT320QVT (SSD1289) + TFT Mega Shield V1.1 by Lseeduino (you can also hook it directly to the Due)
+*
+* Collaborator: CMBSolutions
+* Date: December, 20 2014
+* Contact: git@cmbsolutions.nl
+*/
+
+/*
  * Parallel interface 16bit layer
  */
 
 #include "Pixels.h"
 
 #ifdef PIXELS_MAIN
-#error Pixels_PPI16.h must be included before Pixels_<CONTROLLER>.h
+	#error Pixels_PPI16.h must be included before Pixels_<CONTROLLER>.h
 #endif
 
 #ifndef PIXELS_PPI16_H
 #define PIXELS_PPI16_H
 
 #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-#define DATAPORTH PORTA // 22-29
-#define DATAPORTL PORTC // 30-37
-#define DATADIRH DDRA
-#define DATADIRL DDRC
+	#define DATAPORTH PORTA // 22-29
+	#define DATAPORTL PORTC // 30-37
+	#define DATADIRH DDRA
+	#define DATADIRL DDRC
+#elif defined(__arm__)
+	// No defines needed
 #else
-// shortage of pins for non-Mega boards
-#define DATAPORTH PORTD // 0-7
-#define DATAPORTL PORTB // 8-13
-#define DATADIRH DDRD
-#define DATADIRL DDRB
+	// shortage of pins for non-Mega boards
+	#define DATAPORTH PORTD // 0-7
+	#define DATAPORTL PORTB // 8-13
+	#define DATADIRH DDRD
+	#define DATADIRL DDRB
 #endif
 
 class PPI16 {
@@ -72,28 +83,54 @@ protected:
 
     void writeCmd(uint8_t b) {
         cbi(registerRS, bitmaskRS);
-        DATAPORTH = 0; DATAPORTL = b; pulse_low(registerWR, bitmaskWR);
+#if defined(__arm__)
+ 		LCD_Writ_Bus(0x00, b);
+#else
+		DATAPORTH = 0; DATAPORTL = b; pulse_low(registerWR, bitmaskWR);
+#endif
     }
 
     void writeData(uint8_t data) {
         sbi(registerRS, bitmaskRS);
-        DATAPORTH = 0; DATAPORTL = data; pulse_low(registerWR, bitmaskWR);
-    }
+#if defined(__arm__)
+		LCD_Writ_Bus(0x00, data);
+#else
+		DATAPORTH = 0; DATAPORTL = data; pulse_low(registerWR, bitmaskWR);
+#endif
+	}
 
     void writeData(uint8_t hi, uint8_t lo) {
         sbi(registerRS, bitmaskRS);
-        DATAPORTH = hi; DATAPORTL = lo; pulse_low(registerWR, bitmaskWR);
-    }
+#if defined(__arm__)
+		LCD_Writ_Bus(hi, lo);
+#else
+		DATAPORTH = hi; DATAPORTL = lo; pulse_low(registerWR, bitmaskWR);
+#endif
+	}
 
     void writeDataTwice(uint8_t b) {
         sbi(registerRS, bitmaskRS);
+#if defined(__arm__)
+		LCD_Writ_Bus(b, b);
+#else
         DATAPORTH = b; DATAPORTL = b; pulse_low(registerWR, bitmaskWR);
-    }
+#endif
+	}
 
     void writeCmdData(uint8_t cmd, uint16_t data) {
         writeCmd(cmd);
         writeData(highByte(data), lowByte(data));
     }
+
+	// Copy from UTFT Lib.
+	void _set_direction_registers()
+	{
+		REG_PIOA_OER = 0x0000c000; //PA14,PA15 enable
+		REG_PIOB_OER = 0x04000000; //PB26 enable
+		REG_PIOD_OER = 0x0000064f; //PD0-3,PD6,PD9-10 enable
+		REG_PIOA_OER = 0x00000080; //PA7 enable
+		REG_PIOC_OER = 0x0000003e; //PC1 - PC5 enable
+	}
 
 public:
     /**
@@ -123,12 +160,32 @@ public:
     inline void registerSelect() {
         sbi(registerRS, bitmaskRS);
     }
+
+
+	// Modified version from UTFT Lib
+	inline void LCD_Writ_Bus(char VH, char VL)
+	{
+		REG_PIOA_CODR = 0x0000C080;
+		REG_PIOC_CODR = 0x0000003E;
+		REG_PIOD_CODR = 0x0000064F;
+		REG_PIOA_SODR = ((VH & 0x06) << 13) | ((VL & 0x40) << 1);
+		(VH & 0x01) ? REG_PIOB_SODR = 0x4000000 : REG_PIOB_CODR = 0x4000000;
+		REG_PIOC_SODR = ((VL & 0x01) << 5) | ((VL & 0x02) << 3) | ((VL & 0x04) << 1) | ((VL & 0x08) >> 1) | ((VL & 0x10) >> 3);
+		REG_PIOD_SODR = ((VH & 0x78) >> 3) | ((VH & 0x80) >> 1) | ((VL & 0x20) << 5) | ((VL & 0x80) << 2);
+		pulse_low(registerWR, bitmaskWR);
+	}
 };
 
 void PPI16::initInterface() {
 
+	
+#if defined(__arm__)
+	_set_direction_registers();
+#else
     DATADIRH = 0xFF;
     DATADIRL = 0xFF;
+
+#endif
 
     registerRS	= portOutputRegister(digitalPinToPort(pinRS));
     registerWR	= portOutputRegister(digitalPinToPort(pinWR));
@@ -150,6 +207,10 @@ void PPI16::initInterface() {
     pinMode(pinWR,OUTPUT);
     pinMode(pinCS,OUTPUT);
     pinMode(pinRST,OUTPUT);
+
+#if defined(__arm__)
+	_set_direction_registers();
+#endif
 
     reset();
 }
