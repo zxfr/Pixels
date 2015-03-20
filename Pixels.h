@@ -14,6 +14,7 @@
  * This library includes some code portions and algoritmic ideas derived from works of
  * - Andreas Schiffler -- aschiffler at ferzkopp dot net (SDL_gfx Project)
  * - K. Townsend http://microBuilder.eu (lpc1343codebase Project)
+ * - CMBSolutions git()cmbsolutions.nl
  */
 
 /*
@@ -29,6 +30,10 @@
 
 // #define DISABLE_ANTIALIASING 1
 
+#if defined(__arm__)
+#include <avr/dtostrf.h>
+#endif
+
 #if defined(__AVR__) || defined(TEENSYDUINO)
     #include <Arduino.h>
 
@@ -39,11 +44,16 @@
     #define sbi(reg, bitmask) *reg |= bitmask
     #define pulse_high(reg, bitmask) sbi(reg, bitmask); cbi(reg, bitmask);
     #define pulse_low(reg, bitmask) cbi(reg, bitmask); sbi(reg, bitmask);
+    #define prog_uchar const unsigned char
+    #define prog_uint16_t const uint16_t
 
 #elif defined(__SAM3X8E__)
     #include <Arduino.h>
     #define PROGMEM
+
     #define prog_uchar const unsigned char
+    #define prog_uint16_t const uint16_t
+
     #define pgm_read_byte(x)        (*((char *)x))
     #define pgm_read_word(x)        ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x)))
     #define pgm_read_byte_near(x)   (*((char *)x))
@@ -54,9 +64,25 @@
     #define pgm_read_word_near(x)   ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x)))
     #define pgm_read_word_far(x)    ( ((*((unsigned char *)x + 1)) << 8) + (*((unsigned char *)x))))
     #define PSTR(x)  x
+
+    #define cbi(reg, bitmask) *reg &= ~bitmask
+    #define sbi(reg, bitmask) *reg |= bitmask
+    #define pulse_high(reg, bitmask) sbi(reg, bitmask); cbi(reg, bitmask);
+    #define pulse_low(reg, bitmask) cbi(reg, bitmask); sbi(reg, bitmask);
+
+    #define cport(port, data) port &= data
+    #define sport(port, data) port |= data
+
+    #define regtype volatile uint32_t
+    #define regsize uint32_t
+
 #else
     #define PROGMEM
+
+#ifndef prog_uchar
     #define prog_uchar byte
+    #define prog_uint16_t const uint16_t
+#endif
 
     #define regtype volatile uint32_t
     #define regsize uint16_t
@@ -128,8 +154,8 @@ protected:
     /* currently selected font */
     prog_uchar* currentFont;
 
-    RGB foreground;
-    RGB background;
+    RGB* foreground;
+    RGB* background;
 
     double lineWidth;
 
@@ -148,13 +174,13 @@ protected:
                                int16_t height, prog_uchar* data, int16_t ptr, int16_t length);
 
     virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
-    void setCurrentPixel(RGB color);
+    void setCurrentPixel(RGB* color);
     void setCurrentPixel(int16_t color);
     void fill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     virtual void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
     void putColor(int16_t x, int16_t y, boolean steep, double weight);
-    RGB computeColor(RGB, double weight);
-    RGB computeColor(RGB fg, uint8_t opacity);
+    RGB* computeColor(RGB* bg, double weight);
+    RGB* computeColor(RGB* fg, uint8_t opacity);
 
     void resetRegion();
 
@@ -171,6 +197,11 @@ protected:
     virtual void drawRoundRectangleAntialiased(int16_t x, int16_t y, int16_t width, int16_t height, int16_t rx, int16_t ry, boolean bordermode);
 
     int16_t* loadFileBytes(String);
+
+    RGB* computedBgColor;
+    RGB* computedFgColor;
+    RGB* bgBuffer;
+    RGB* fgBuffer;
 
 public:
     /**
@@ -297,7 +328,10 @@ public:
      * @param b the blue component
      */
     inline void setBackground(uint8_t r, uint8_t g, uint8_t b) {
-        setBackground(RGB(r, g, b));
+        bgBuffer->red = r;
+        bgBuffer->green = g;
+        bgBuffer->blue = b;
+        setBackground(bgBuffer);
     }
     /**
      * Sets the current color to the specified color.
@@ -307,14 +341,17 @@ public:
      * @param b the blue component
      */
     inline void setColor(uint8_t r, uint8_t g, uint8_t b) {
-        setColor(RGB(r, g, b));
+        fgBuffer->red = r;
+        fgBuffer->green = g;
+        fgBuffer->blue = b;
+        setColor(fgBuffer);
     }
     /**
      * Sets the current background color to the specified color.
      * All subsequent relevant graphics operations use this specified color.
-     * @param color color object
+     * @param color color object reference
      */
-    inline void setBackground(RGB color) {
+    inline void setBackground(RGB* color) {
         background = color;
     }
     /**
@@ -322,21 +359,21 @@ public:
      * All subsequent graphics operations use this specified color.
      * @param color color object
      */
-    inline void setColor(RGB color) {
+    inline void setColor(RGB* color) {
         foreground = color;
     }
     /**
      * Gets the graphics context's current background color.
      * @return    the graphics context's current background color.
      */
-    inline RGB getBackground() {
+    inline RGB* getBackground() {
         return background;
     }
     /**
      * Gets the graphics context's current color.
      * @return    the graphics context's current color.
      */
-    inline RGB getColor() {
+    inline RGB* getColor() {
         return foreground;
     }
     /**
@@ -348,7 +385,7 @@ public:
      * @param   y  <i>y</i> coordinate.
      * @return  pixel color or the graphics context's current background color.
      */
-    RGB getPixel(int16_t x, int16_t y);
+    RGB* getPixel(int16_t x, int16_t y);
     /**
      * Draws a pixel, using the current color, at the point
      * <code>(x,&nbsp;y)</code>
@@ -528,6 +565,20 @@ public:
      * @param    y   the <i>y</i> coordinate.
      */
     void cleanIcon(int16_t xx, int16_t yy, prog_uchar data[]);
+    /**
+     * @return height of an icon, created with Pixelmeister
+     * @param    data icon image bytes.
+     */
+    int16_t getIconHeight(prog_uchar* data) {
+        return pgm_read_byte_near(data + 4);
+    }
+    /**
+     * @return width of an icon, created with Pixelmeister
+     * @param    data icon image bytes.
+     */
+    int16_t getIconWidth(prog_uchar* data) {
+        return pgm_read_byte_near(data + 5);
+    }
     /**
      * Loads from an external FAT-drive and draws specified bitmap image.
      * The image is drawn with its top-left corner at

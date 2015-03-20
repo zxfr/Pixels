@@ -12,6 +12,8 @@
  * This library includes some code portions and algoritmic ideas derived from works of
  * - Andreas Schiffler -- aschiffler at ferzkopp dot net (SDL_gfx Project)
  * - K. Townsend http://microBuilder.eu (lpc1343codebase Project)
+ * - CMBSolutions git()cmbsolutions.nl
+ * - UTFT Library http://www.rinkydinkelectronics.com/library.php?id=51
  */
 
 /*
@@ -70,6 +72,50 @@ protected:
 
     void initInterface();
 
+#if defined(__arm__)
+    void setDirectionRegisters() {
+        // Copy from UTFT Lib.
+        REG_PIOA_OER = 0x0000c000; //PA14,PA15 enable
+        REG_PIOB_OER = 0x04000000; //PB26 enable
+        REG_PIOD_OER = 0x0000064f; //PD0-3,PD6,PD9-10 enable
+        REG_PIOA_OER = 0x00000080; //PA7 enable
+        REG_PIOC_OER = 0x0000003e; //PC1 - PC5 enable
+    }
+
+    // Modified version from UTFT Lib
+    inline void writeBus(char hi, char lo) {
+        REG_PIOA_CODR = 0x0000C080;
+        REG_PIOC_CODR = 0x0000003E;
+        REG_PIOD_CODR = 0x0000064F;
+        REG_PIOA_SODR = ((hi & 0x06) << 13) | ((lo & 0x40) << 1);
+        (hi & 0x01) ? REG_PIOB_SODR = 0x4000000 : REG_PIOB_CODR = 0x4000000;
+        REG_PIOC_SODR = ((lo & 0x01) << 5) | ((lo & 0x02) << 3) | ((lo & 0x04) << 1) | ((lo & 0x08) >> 1) | ((lo & 0x10) >> 3);
+        REG_PIOD_SODR = ((hi & 0x78) >> 3) | ((hi & 0x80) >> 1) | ((lo & 0x20) << 5) | ((lo & 0x80) << 2);
+        pulse_low(registerWR, bitmaskWR);
+    }
+
+    void writeCmd(uint8_t b) {
+        cbi(registerRS, bitmaskRS);
+        writeBus(0x00, b);
+    }
+
+    void writeData(uint8_t data) {
+        sbi(registerRS, bitmaskRS);
+        writeBus(0x00, data);
+    }
+
+    void writeData(uint8_t hi, uint8_t lo) {
+        sbi(registerRS, bitmaskRS);
+        writeBus(hi, lo);
+    }
+
+    void writeDataTwice(uint8_t b) {
+        sbi(registerRS, bitmaskRS);
+        writeBus(b, b);
+    }
+
+#else
+
     void writeCmd(uint8_t b) {
         cbi(registerRS, bitmaskRS);
         DATAPORTH = 0; DATAPORTL = b; pulse_low(registerWR, bitmaskWR);
@@ -89,6 +135,8 @@ protected:
         sbi(registerRS, bitmaskRS);
         DATAPORTH = b; DATAPORTL = b; pulse_low(registerWR, bitmaskWR);
     }
+
+#endif
 
     void writeCmdData(uint8_t cmd, uint16_t data) {
         writeCmd(cmd);
@@ -127,8 +175,12 @@ public:
 
 void PPI16::initInterface() {
 
+#if defined(__arm__)
+    setDirectionRegisters();
+#else
     DATADIRH = 0xFF;
     DATADIRL = 0xFF;
+#endif
 
     registerRS	= portOutputRegister(digitalPinToPort(pinRS));
     registerWR	= portOutputRegister(digitalPinToPort(pinWR));
@@ -150,6 +202,10 @@ void PPI16::initInterface() {
     pinMode(pinWR,OUTPUT);
     pinMode(pinCS,OUTPUT);
     pinMode(pinRST,OUTPUT);
+
+#if defined(__arm__)
+    setDirectionRegisters();
+#endif
 
     reset();
 }

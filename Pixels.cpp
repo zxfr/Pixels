@@ -59,6 +59,11 @@ PixelsBase::PixelsBase(uint16_t width, uint16_t height) {
     lineWidth = 1;
     fillDirection = 0;
 
+    computedBgColor = new RGB(0, 0, 0);
+    computedFgColor = new RGB(0, 0, 0);
+    bgBuffer = new RGB(0, 0, 0);
+    fgBuffer = new RGB(0, 0, 0);
+
     setBackground(0,0,0);
     setColor(0xFF,0xFF,0xFF);
 }
@@ -90,13 +95,13 @@ void PixelsBase::setOrientation( uint8_t direction ){
 /*  Graphic primitives */
 
 void PixelsBase::clear() {
-    RGB sav = getColor();
+    RGB* sav = getColor();
     setColor(background);
     fillRectangle(0, 0, width, height);
     setColor(sav);
 }
 
-RGB PixelsBase::getPixel(int16_t x, int16_t y) {
+RGB* PixelsBase::getPixel(int16_t x, int16_t y) {
     return getBackground();
 }
 
@@ -166,7 +171,7 @@ void PixelsBase::drawRectangle(int16_t x, int16_t y, int16_t width, int16_t heig
 }
 
 void PixelsBase::fillRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
-    fill(foreground.convertTo565(), x, y, x+width-1, y+height-1);
+    fill(foreground->convertTo565(), x, y, x+width-1, y+height-1);
 }
 
 void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius) {
@@ -830,6 +835,10 @@ int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data) {
 
     chipDeselect();
 
+    if ( orientation != PORTRAIT ) {
+        delete raster;
+    }
+
     return 0;
 }
 
@@ -893,7 +902,7 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
         return;
     }
 
-    RGB fg = foreground;
+    RGB* fg = foreground;
 
     int16_t kernPtr = 0;
     int16_t kern = -100; // no kerning
@@ -1031,7 +1040,7 @@ int16_t PixelsBase::getTextWidth(String text, int8_t kerning[]) {
 
 void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t yy,
                            int16_t glyphHeight, prog_uchar* data, int16_t ptr, int16_t length) {
-    RGB fg = foreground;
+    RGB* fg = foreground;
 
     int16_t width = 0xff & pgm_read_byte_near(data + ptr + 4);
 
@@ -1062,9 +1071,9 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                     y += len;
                     if ( (0x80 & b) > 0 ) {
                         if ( clean ) {
-                            setColor(background.red, background.green, background.blue);
+                            setColor(background);
                         } else {
-                            setColor(fg.red, fg.green, fg.blue);
+                            setColor(fg);
                         }
                         while ( yt + len > effHeight ) {
                             vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + effHeight - 1);
@@ -1076,10 +1085,10 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                     }
                 } else {
                     if ( clean ) {
-                        setColor(background.red, background.green, background.blue);
+                        setColor(background);
                     } else {
                         uint8_t opacity = (0xff & (b << 2));
-                        RGB cl = computeColor(fg, opacity);
+                        RGB* cl = computeColor(fg, opacity);
                         setColor(cl);
                     }
                     drawPixel(x1 + marginLeft + x, yy + marginTop + y);
@@ -1105,9 +1114,9 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                     x += len;
                     if ( (0x80 & b) > 0 ) {
                         if ( clean ) {
-                            setColor(background.red, background.green, background.blue);
+                            setColor(background);
                         } else {
-                            setColor(fg.red, fg.green, fg.blue);
+                            setColor(fg);
                         }
                         while ( xt + len > effWidth ) {
                             hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
@@ -1119,10 +1128,10 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                     }
                 } else {
                     if ( clean ) {
-                        setColor(background.red, background.green, background.blue);
+                        setColor(background);
                     } else {
                         uint8_t opacity = (0xff & (b << 2));
-                        RGB cl = computeColor(fg, opacity);
+                        RGB* cl = computeColor(fg, opacity);
                         setColor(cl);
                     }
                     drawPixel(x1 + marginLeft + x, yy + marginTop + y);
@@ -1140,9 +1149,7 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
     } else if ( fontType == BITMASK_FONT ) {
 
         if ( clean ) {
-            setColor(background.red, background.green, background.blue);
-//					} else {
-//                        setColor(fg.red, fg.green, fg.blue );
+            setColor(background);
         }
 
         boolean compressed = (pgm_read_byte_near(data + ptr + 7) & 0x80) > 0;
@@ -1159,7 +1166,7 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                         int16_t x = ctr / effHeight;
                         int16_t yt = y;
                         while ( yt + len > effHeight ) {
-                            vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + effHeight);
+                            vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + effHeight - 1);
                             int16_t dy = effHeight - yt;
                             len -= dy;
                             ctr += dy;
@@ -1167,7 +1174,7 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                             yt = 0;
                             x++;
                         }
-                        vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + yt + len);
+                        vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + yt + len - 1);
                     }
                     ctr += len;
                     y += len;
@@ -1184,7 +1191,7 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                     int16_t y = ctr / effWidth;
                     if ( color ) {
                         while ( xt + len > effWidth ) {
-                            hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + effWidth);
+                            hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
                             int16_t dx = effWidth - xt;
                             len -= dx;
                             ctr += dx;
@@ -1192,7 +1199,7 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                             xt = 0;
                             y++;
                         }
-                        hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + xt + len);
+                        hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + xt + len - 1);
                     }
                     ctr += len;
                     x += len;
@@ -1222,7 +1229,7 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t 
                     }
                     int16_t mask = 1 << (7 - j);
                     if ( (b & mask) == 0 ) {
-                        vLine(x1 + marginLeft + xt + j, yy + marginTop + y, yy + marginTop + y + 1);
+                        vLine(x1 + marginLeft + xt + j, yy + marginTop + y, yy + marginTop + y);
                     }
                 }
             }
@@ -1244,11 +1251,11 @@ void PixelsBase::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
         return;
     }
 
-    RGB result;
+    RGB* result;
     if ( alpha != 1 ) {
-        RGB bg = getPixel(x, y);
+        RGB* bg = getPixel(x, y);
         result = computeColor(bg, alpha);
-        RGB sav = getColor();
+        RGB* sav = getColor();
         setColor(result);
         drawPixel(x, y);
         setColor(sav);
@@ -1258,7 +1265,7 @@ void PixelsBase::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
 }
 
 
-RGB PixelsBase::computeColor(RGB bg, double alpha) {
+RGB* PixelsBase::computeColor(RGB* bg, double alpha) {
     if ( alpha < 0 ) {
         alpha = 0;
         return bg;
@@ -1266,19 +1273,19 @@ RGB PixelsBase::computeColor(RGB bg, double alpha) {
     if ( alpha > 1 ) {
         alpha = 1;
     }
-    int16_t sr = (int)(bg.red * (1 - alpha) + foreground.red * alpha);
-    int16_t sg = (int)(bg.green * (1 - alpha) + foreground.green * alpha);
-    int16_t sb = (int)(bg.blue * (1 - alpha) + foreground.blue * alpha);
-    return RGB(sr, sg, sb);
+    computedBgColor->red = (int)(bg->red * (1 - alpha) + foreground->red * alpha);
+    computedBgColor->green = (int)(bg->green * (1 - alpha) + foreground->green * alpha);
+    computedBgColor->blue = (int)(bg->blue * (1 - alpha) + foreground->blue * alpha);
+    return computedBgColor;
 }
 
-RGB PixelsBase::computeColor(RGB fg, uint8_t opacity) {
-    int32_t sr = (int32_t)fg.red * (255 - opacity) + background.red * opacity;
-    int32_t sg = (int32_t)fg.green * (255 - opacity) + background.green * opacity;
-    int32_t sb = (int32_t)fg.blue * (255 - opacity) + background.blue * opacity;
-    sr /= 200;
-    sg /= 200;
-    sb /= 200;
+RGB* PixelsBase::computeColor(RGB* fg, uint8_t opacity) {
+    int32_t sr = (int32_t)fg->red * (255 - opacity) + background->red * opacity;
+    int32_t sg = (int32_t)fg->green * (255 - opacity) + background->green * opacity;
+    int32_t sb = (int32_t)fg->blue * (255 - opacity) + background->blue * opacity;
+    sr /= 255;
+    sg /= 255;
+    sb /= 255;
     if ( sr > 255 ) {
         sr = 255;
     }
@@ -1288,7 +1295,10 @@ RGB PixelsBase::computeColor(RGB fg, uint8_t opacity) {
     if ( sb > 255 ) {
         sb = 255;
     }
-    return RGB((uint8_t)sr, (uint8_t)sg, (uint8_t)sb);
+    computedFgColor->red = sr; // (uint8_t)(sr & 0xFF);
+    computedFgColor->green = sg; // (uint8_t)(sg & 0xFF);
+    computedFgColor->blue = sb; // (uint8_t)(sb & 0xFF);
+    return computedFgColor;
 }
 
 void PixelsBase::scroll(int16_t dy, int8_t flags) {
@@ -1320,7 +1330,11 @@ void PixelsBase::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
         }
         for ( int16_t i = 0; i < mdy - easingLen*2; i++ ) {
             scroll(step, x1, x2, flags & SCROLL_CLEAN);
-            delay(dlx+factor);
+            if ( mdy > 150 ) {
+                delay(factor);
+            } else {
+                delay(dlx+factor);
+            }
         }
         for ( int16_t i = 1; i <= easingLen; i++ ) {
             scroll(step, x1, x2, flags & SCROLL_CLEAN);
@@ -1347,7 +1361,7 @@ void PixelsBase::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
         if ( (flags & SCROLL_CLEAN) > 0 ) {
 
             scrollCleanMode = true;
-            RGB sav = getColor();
+            RGB* sav = getColor();
             setColor(getBackground());
 
             boolean changed = false;
@@ -1400,7 +1414,7 @@ void PixelsBase::drawPixel(int16_t x, int16_t y) {
         return;
     }
 
-    if ( relativeOrigin ) {
+    if ( relativeOrigin || currentScroll == 0 ) {
         if ( currentScroll != 0 ) {
             if ( landscape ) {
                 int edge = currentScroll;
@@ -1415,7 +1429,7 @@ void PixelsBase::drawPixel(int16_t x, int16_t y) {
             }
         }
     } else {
-        if ( landscape ) {
+        if ( !landscape ) {
             x = (x + deviceHeight + currentScroll);
             while (x > deviceHeight ) {
                 x -= deviceHeight;
@@ -1546,11 +1560,11 @@ void PixelsBase::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2)
 }
 
 void PixelsBase::hLine(int16_t x1, int16_t y, int16_t x2) {
-    fill(foreground.convertTo565(), x1, y, x2, y);
+    fill(foreground->convertTo565(), x1, y, x2, y);
 }
 
 void PixelsBase::vLine(int16_t x, int16_t y1, int16_t y2) {
-    fill(foreground.convertTo565(), x, y1, x, y2);
+    fill(foreground->convertTo565(), x, y1, x, y2);
 }
 
 void PixelsBase::resetRegion() {
@@ -1561,7 +1575,7 @@ void PixelsBase::setCurrentPixel(int16_t color) {
     deviceWriteData(highByte(color), lowByte(color));
 }
 
-void PixelsBase::setCurrentPixel(RGB color) {
-    int16_t c = color.convertTo565();
+void PixelsBase::setCurrentPixel(RGB* color) {
+    int16_t c = color->convertTo565();
     deviceWriteData(highByte(c), lowByte(c));
 }
