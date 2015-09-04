@@ -29,6 +29,7 @@
 #define PIXELS_BASE_H
 
 // #define DISABLE_ANTIALIASING 1
+// #define NO_FILL_TEXT_BACKGROUND 1
 
 #if defined(__arm__)
 #include <avr/dtostrf.h>
@@ -110,6 +111,10 @@
 #define PORTRAIT_FLIP 2
 #define LANDSCAPE_FLIP 3
 
+#define TRANSPARENT_TEXT_BACKGROUND 0
+#define FILL_TEXT_BACKGROUND 1
+
+
 #define ipart(X) ((int16_t)(X))
 #define round(X) ((uint16_t)(((double)(X))+0.5))
 #define fpart(X) (((double)(X))-(double)ipart(X))
@@ -122,6 +127,8 @@ extern regsize bitmaskCS;
 #define chipDeselect() sbi(registerCS, bitmaskCS)
 
 class RGB {
+private:
+    uint16_t col;
 public:
     uint8_t red;
     uint8_t green;
@@ -129,6 +136,8 @@ public:
 
     RGB(uint8_t r, uint8_t g, uint8_t b);
     RGB();
+
+    void setColor(int32_t r, int32_t g, int32_t b);
 
     RGB convert565toRGB(uint16_t color);
     uint16_t convertRGBto565(RGB color);
@@ -169,15 +178,17 @@ protected:
     int16_t flipScroll;
     boolean scrollCleanMode;
 
+    int8_t glyphPrintMode;
+
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
     void drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t yy,
-                               int16_t height, prog_uchar* data, int16_t ptr, int16_t length);
+                               int16_t height, prog_uchar* data, int16_t length);
 
-    virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
+    virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {}
     void setCurrentPixel(RGB* color);
     void setCurrentPixel(int16_t color);
     void fill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2);
-    virtual void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {};
+    virtual void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {}
     void putColor(int16_t x, int16_t y, boolean steep, double weight);
     RGB* computeColor(RGB* bg, double weight);
     RGB* computeColor(RGB* fg, uint8_t opacity);
@@ -187,9 +198,9 @@ protected:
     void hLine(int16_t x1, int16_t y1, int16_t x2);
     void vLine(int16_t x1, int16_t y1, int16_t y2);
 
-    virtual void deviceWriteData(uint8_t hi, uint8_t lo) {};
+    virtual void deviceWriteData(uint8_t hi, uint8_t lo) {}
 
-    virtual void scrollCmd() {};
+    virtual void scrollCmd() {}
 
     virtual void drawCircleAntialiaced(int16_t x, int16_t y, int16_t radius, boolean bordermode);
     virtual void drawFatLineAntialiased(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -213,7 +224,7 @@ public:
     /**
      * Initializes hardware with defaults.
      */
-    virtual void init() {};
+    virtual void init() {}
     /**
      * Sets the current coordinate space orientation.
      * Default value depends on initially given device width and height (PORTRAIT if height > width, otherwise LANDSCAPE).
@@ -315,7 +326,7 @@ public:
      * Outout fine tuning method for slow devices
      * @param direction accepts FILL_TOPDOWN, FILL_LEFTRIGHT, FILL_DOWNTOP or FILL_RIGHTLEFT
      */
-    virtual void setFillDirection(uint8_t direction) {};
+    virtual void setFillDirection(uint8_t direction) {}
     /**
      * Fills the screen with the current background color
      */
@@ -328,9 +339,7 @@ public:
      * @param b the blue component
      */
     inline void setBackground(uint8_t r, uint8_t g, uint8_t b) {
-        bgBuffer->red = r;
-        bgBuffer->green = g;
-        bgBuffer->blue = b;
+        bgBuffer->setColor(r, g, b);
         setBackground(bgBuffer);
     }
     /**
@@ -341,9 +350,7 @@ public:
      * @param b the blue component
      */
     inline void setColor(uint8_t r, uint8_t g, uint8_t b) {
-        fgBuffer->red = r;
-        fgBuffer->green = g;
-        fgBuffer->blue = b;
+        fgBuffer->setColor(r, g, b);
         setColor(fgBuffer);
     }
     /**
@@ -606,6 +613,26 @@ public:
      * @param flags can be 0, SCROLL_SMOOTH or/and SCROLL_CLEAN
      */
     void scroll(int16_t dy, int8_t flags);
+
+    /**
+     * returns current print mode
+     * @see setPrintMode(int8_t)
+     */
+    int8_t getPrintMode() {
+        return glyphPrintMode;
+    }
+
+    /**
+     * sets text output mode
+     * @param printMode FILL_TEXT_BACKGROUND=1 forces to fill glyph background with current background color;
+     * TRANSPARENT_TEXT_BACKGROUND=0 forces to print glyphs with no background (default)
+     */
+    void setPrintMode(int8_t printMode) {
+#ifndef NO_FILL_TEXT_BACKGROUND
+        glyphPrintMode = printMode;
+#endif
+    }
+
     /**
      * Sets this graphics context's font to the specified font.
      * All subsequent text operations using the context use this font.

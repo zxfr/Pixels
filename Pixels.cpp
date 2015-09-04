@@ -17,13 +17,19 @@
 #include "Pixels.h"
 
 RGB::RGB(uint8_t r, uint8_t g, uint8_t b) {
-    red = r;
-    green = g;
-    blue = b;
+    setColor(r, g, b);
 }
 
 RGB::RGB() {
 }
+
+void RGB::setColor(int32_t r, int32_t g, int32_t b) {
+    red = r;
+    green = g;
+    blue = b;
+    col = (((uint16_t)red / 8) << 11) | ((green / 4) << 5) | (blue / 8);
+}
+
 
 RGB RGB::convert565toRGB(uint16_t color) {
     uint8_t r = ((0xf800 & color)>>11) * 255 / 31;
@@ -37,7 +43,7 @@ uint16_t RGB::convertRGBto565(RGB color) {
 }
 
 uint16_t RGB::convertTo565() {
-    return ((red / 8) << 11) | ((green / 4) << 5) | (blue / 8);
+    return col; // ((red / 8) << 11) | ((green / 4) << 5) | (blue / 8);
 }
 
 regtype *registerCS; // chip select
@@ -606,7 +612,7 @@ void PixelsBase::drawIcon(int16_t xx, int16_t yy, prog_uchar* data) {
 
     int16_t height =  pgm_read_byte_near(data + 4);
 
-    drawGlyph(fontType, false, xx, yy, height, data, 1, length-1);
+    drawGlyph(fontType, false, xx, yy, height, data + 1, length-1);
 }
 
 void PixelsBase::cleanIcon(int16_t xx, int16_t yy, prog_uchar* data) {
@@ -620,7 +626,7 @@ void PixelsBase::cleanIcon(int16_t xx, int16_t yy, prog_uchar* data) {
 
     int16_t height =  pgm_read_byte_near(data + 4);
 
-    drawGlyph(fontType, true, xx, yy, height, data, 1, length-1);
+    drawGlyph(fontType, true, xx, yy, height, data + 1, length-1);
 }
 
 int8_t PixelsBase::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, prog_uint16_t* data) {
@@ -931,7 +937,7 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
 //						Serial.println( " glyph definition. Font corrupted?" );
                     break;
                 }
-                drawGlyph(fontType, clean, x1, yy, glyphHeight, currentFont, ptr, length);
+                drawGlyph(fontType, clean, x1, yy, glyphHeight, currentFont + ptr, length);
                 width = 0xff & pgm_read_byte_near(currentFont + ptr + 4);
                 found = true;
                 break;
@@ -1038,203 +1044,243 @@ int16_t PixelsBase::getTextWidth(String text, int8_t kerning[]) {
     return x1;
 }
 
-void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t x1, int16_t yy,
-                           int16_t glyphHeight, prog_uchar* data, int16_t ptr, int16_t length) {
+void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t yy,
+                           int16_t glyphHeight, prog_uchar* data, int16_t length) {
+
+    int16_t glyphWidth = 0xff & pgm_read_byte_near(data + 4);
+    int16_t mLeft = 0x7f & pgm_read_byte_near(data + 5);
+    int16_t mTop = 0xff & pgm_read_byte_near(data + 6);
+    int16_t mRight = 0x7f & pgm_read_byte_near(data + 7);
+
+    int16_t effWidth = glyphWidth - mLeft - mRight;
+
+    boolean vraster = (0x80 & pgm_read_byte_near(data + 5)) > 0;
+    boolean compressed = (pgm_read_byte_near(data + 7) & 0x80) > 0;
+
     RGB* fg = foreground;
-
-    int16_t width = 0xff & pgm_read_byte_near(data + ptr + 4);
-
-    int16_t marginLeft = 0x7f & pgm_read_byte_near(data + ptr + 5);
-    int16_t marginTop = 0xff & pgm_read_byte_near(data + ptr + 6);
-    int16_t marginRight = 0x7f & pgm_read_byte_near(data + ptr + 7);
-    int16_t effWidth = width - marginLeft - marginRight;
+    RGB* bg = background;
 
     int16_t ctr = 0;
+#ifndef NO_FILL_TEXT_BACKGROUND
+    int16_t prev = -1;
+    int16_t last = -1;
+#endif
 
-    if ( fontType == ANTIALIASED_FONT ) {
+    int16_t eff = vraster ?
+            glyphHeight - mTop - mRight :
+            glyphWidth - mLeft - mRight;
 
-        boolean vraster = (0x80 & pgm_read_byte_near(data + ptr + 5)) > 0;
+    int16_t offsetLeft = mLeft + xx;
+    int16_t offsetTop = mTop + yy;
 
-        if ( vraster ) {
-            int16_t marginBottom = marginRight;
-            int16_t effHeight = glyphHeight - marginTop - marginBottom;
+    int16_t hEdge = xx + glyphWidth;
+    int16_t vEdge = yy + glyphHeight;
 
-            int16_t y = 0;
-            for ( int16_t i = 0; i < length - 8; i++ ) {
-                int16_t b = 0xff & pgm_read_byte_near(data + ptr + 8 + i);
-                int16_t x = ctr / effHeight;
+    length -= 8;
 
-                if ( (0xc0 & b) > 0 ) {
-                    int16_t yt = y;
-                    int16_t len = 0x3f & b;
-                    ctr += len;
-                    y += len;
-                    if ( (0x80 & b) > 0 ) {
-                        if ( clean ) {
-                            setColor(background);
+    if ( !(fontType == BITMASK_FONT && !compressed) ) {
+
+        int16_t edge = vraster ? offsetTop + eff - 1 : offsetLeft + eff - 1;
+
+        for ( int16_t i = 0; i < length; i++ ) {
+            int16_t p1 = ctr / eff;
+            int16_t p2 = ctr % eff;
+
+            int16_t b = 0xff & pgm_read_byte_near(data + 8 + i);
+            int16_t len = 0x7f & b;
+            boolean color = fontType == BITMASK_FONT ? (0x80 & b) > 0 : true;
+
+            if ( color || glyphPrintMode == FILL_TEXT_BACKGROUND ) {
+
+#ifndef NO_FILL_TEXT_BACKGROUND
+                if ( glyphPrintMode == FILL_TEXT_BACKGROUND && prev != p1 ) {
+                    setColor(bg);
+                    if ( vraster ) {
+                        if ( prev < 0 ) {
+                            fillRectangle(xx, yy, mLeft + 1, glyphHeight + 1);
+                        } else {
+                            vLine(offsetLeft + p1, yy, vEdge);
+                        }
+                    } else {
+                        if ( prev < 0 ) {
+                            fillRectangle(xx, yy, glyphWidth + 1, mTop + 1);
+                        } else {
+                            hLine(xx, offsetTop + p1, hEdge);
+                        }
+                    }
+                    prev = p1;
+                }
+#endif
+                int16_t x = vraster ? offsetLeft + p1 : offsetLeft + p2;
+                int16_t y = vraster ? offsetTop + p2 : offsetTop + p1;
+
+                if ( color && !clean ) {
+                    setColor(fg);
+                } else {
+                    setColor(bg);
+                }
+
+                if ( fontType == BITMASK_FONT || (0xc0 & b) > 0 ) {
+                    if ( fontType == ANTIALIASED_FONT ) {
+                        len = 0x3f & b;
+                        ctr += len;
+                    }
+
+                    if ( fontType == BITMASK_FONT || (0x80 & b) > 0 ) {
+
+                        while ( p2 + len > eff ) {
+                            if ( color ) {
+                                if ( vraster ) {
+                                    vLine(x, y, edge);
+                                } else {
+                                    hLine(x, y, edge);
+                                }
+                            }
+                            if (fontType == BITMASK_FONT) {
+                                ctr += eff - p2;
+                            }
+
+                            len -= eff - p2;
+                            p2 = 0;
+                            p1++;
+                            x = vraster ? offsetLeft + p1 : offsetLeft;
+                            y = vraster ? offsetTop : offsetTop + p1;
+
+#ifndef NO_FILL_TEXT_BACKGROUND
+                            if ( glyphPrintMode == FILL_TEXT_BACKGROUND ) {
+                                setColor(bg);
+                                if ( vraster ) {
+                                    vLine(x, yy, vEdge);
+                                } else {
+                                    hLine(xx, y, hEdge);
+                                }
+                                if ( !clean ) {
+                                    setColor(fg);
+                                }
+                                prev = p1;
+                            }
+#endif
+                        }
+
+                        if ( color ) {
+                            if ( vraster ) {
+                                vLine(x, y, y + len - 1);
+                            } else {
+                                hLine(x, y, x + len - 1);
+                            }
                         } else {
                             setColor(fg);
                         }
-                        while ( yt + len > effHeight ) {
-                            vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + effHeight - 1);
-                            len -= effHeight - yt;
-                            yt = 0;
-                            x++;
+
+#ifndef NO_FILL_TEXT_BACKGROUND
+                    } else if ( fontType == ANTIALIASED_FONT && glyphPrintMode == FILL_TEXT_BACKGROUND ) {
+                        setColor(bg);
+                        while ( p2 + len > eff ) {
+                            len -= eff - p2;
+                            p2 = 0;
+                            p1++;
+                            x = vraster ? offsetLeft + p1 : offsetLeft;
+                            y = vraster ? offsetTop : offsetTop + p1;
+
+                            if ( vraster ) {
+                                vLine(x, yy, vEdge);
+                            } else {
+                                hLine(xx, y, hEdge);
+                            }
                         }
-                        vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + yt + len - 1);
+                        prev = p1;
+                        if ( !clean ) {
+                            setColor(fg);
+                        }
+#endif
                     }
-                } else {
+                } else if (fontType == ANTIALIASED_FONT) {
                     if ( clean ) {
-                        setColor(background);
+                        setColor(bg);
                     } else {
                         uint8_t opacity = (0xff & (b << 2));
                         RGB* cl = computeColor(fg, opacity);
                         setColor(cl);
                     }
-                    drawPixel(x1 + marginLeft + x, yy + marginTop + y);
+                    drawPixel(x, y);
                     ctr++;
-                    y++;
                 }
-                while ( y >= effHeight ) {
-                    y -= effHeight;
-                }
+#ifndef NO_FILL_TEXT_BACKGROUND
+                last = p1;
+#endif
             }
-
-        } else {
-
-            int16_t x = 0;
-            for ( int16_t i = 0; i < length - 8; i++ ) {
-                int16_t b = 0xff & pgm_read_byte_near(data + ptr + 8 + i);
-                int16_t y = ctr / effWidth;
-
-                if ( (0xc0 & b) > 0 ) {
-                    int16_t xt = x;
-                    int16_t len = 0x3f & b;
-                    ctr += len;
-                    x += len;
-                    if ( (0x80 & b) > 0 ) {
-                        if ( clean ) {
-                            setColor(background);
-                        } else {
-                            setColor(fg);
-                        }
-                        while ( xt + len > effWidth ) {
-                            hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
-                            len -= effWidth - xt;
-                            xt = 0;
-                            y++;
-                        }
-                        hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + xt + len - 1);
-                    }
-                } else {
-                    if ( clean ) {
-                        setColor(background);
-                    } else {
-                        uint8_t opacity = (0xff & (b << 2));
-                        RGB* cl = computeColor(fg, opacity);
-                        setColor(cl);
-                    }
-                    drawPixel(x1 + marginLeft + x, yy + marginTop + y);
-                    ctr++;
-                    x++;
-                }
-                while ( x >= effWidth ) {
-                    x -= effWidth;
-                }
+            if ( fontType == BITMASK_FONT ) {
+                ctr += len;
             }
         }
 
-        setColor(fg);
-
-    } else if ( fontType == BITMASK_FONT ) {
-
-        if ( clean ) {
-            setColor(background);
-        }
-
-        boolean compressed = (pgm_read_byte_near(data + ptr + 7) & 0x80) > 0;
-        if ( compressed ) {
-            boolean vraster = (pgm_read_byte_near(data + ptr + 5) & 0x80) > 0;
+#ifndef NO_FILL_TEXT_BACKGROUND
+        if ( glyphPrintMode == FILL_TEXT_BACKGROUND ) {
+            setColor(bg);
             if ( vraster ) {
-                int16_t marginBottom = marginRight;
-                int16_t effHeight = glyphHeight - marginTop - marginBottom;
-                int16_t y = 0;
-                for ( int16_t i = 0; i < length - 8; i++ ) {
-                    int16_t len = 0x7f & pgm_read_byte_near(data + ptr + 8 + i);
-                    boolean color = (0x80 & pgm_read_byte_near(data + ptr + 8 + i)) > 0;
-                    if ( color ) {
-                        int16_t x = ctr / effHeight;
-                        int16_t yt = y;
-                        while ( yt + len > effHeight ) {
-                            vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + effHeight - 1);
-                            int16_t dy = effHeight - yt;
-                            len -= dy;
-                            ctr += dy;
-                            y += dy;
-                            yt = 0;
-                            x++;
-                        }
-                        vLine(x1 + marginLeft + x, yy + marginTop + yt, yy + marginTop + yt + len - 1);
-                    }
-                    ctr += len;
-                    y += len;
-                    while ( y >= effHeight ) {
-                        y -= effHeight;
-                    }
-                }
+                fillRectangle(offsetLeft + last + 1, yy, glyphWidth - mLeft - last - 1, glyphHeight + 1);
             } else {
-                int16_t x = 0;
-                for ( int16_t i = 0; i < length - 8; i++ ) {
-                    int16_t len = 0x7f & pgm_read_byte_near(data + ptr + 8 + i);
-                    boolean color = (0x80 & pgm_read_byte_near(data + ptr + 8 + i)) > 0;
-                    int16_t xt = x;
-                    int16_t y = ctr / effWidth;
-                    if ( color ) {
-                        while ( xt + len > effWidth ) {
-                            hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + effWidth - 1);
-                            int16_t dx = effWidth - xt;
-                            len -= dx;
-                            ctr += dx;
-                            x += dx;
-                            xt = 0;
-                            y++;
-                        }
-                        hLine(x1 + marginLeft + xt, yy + marginTop + y, x1 + marginLeft + xt + len - 1);
-                    }
-                    ctr += len;
-                    x += len;
-                    while ( x >= effWidth ) {
-                        x -= effWidth;
-                    }
-                }
-            }
-        } else {
-
-            int16_t x = 0;
-            int16_t offset = 0;
-            for ( int16_t i = 0; i < length - 8; i++, offset += 8, x += 8 ) {
-                int16_t b = 0xff & pgm_read_byte_near(data + ptr + 8 + i);
-
-                while ( x >= effWidth ) {
-                    x -= effWidth;
-                }
-
-                int16_t xt = x;
-                int16_t y = offset / effWidth;
-
-                for ( uint8_t j = 0; j < 8; j++ ) {
-                    if ( xt + j == effWidth ) {
-                        xt = -j;
-                        y++;
-                    }
-                    int16_t mask = 1 << (7 - j);
-                    if ( (b & mask) == 0 ) {
-                        vLine(x1 + marginLeft + xt + j, yy + marginTop + y, yy + marginTop + y);
-                    }
-                }
+                fillRectangle(xx, offsetTop + last + 1, glyphWidth, glyphHeight - mTop - last);
             }
         }
+#endif
+
+    } else {
+
+        for ( int16_t i = 0; i < length; i++ ) {
+            int16_t b = 0xff & pgm_read_byte_near(data + 8 + i);
+            int16_t x = i * 8 % effWidth;
+            int16_t y = i * 8 / effWidth;
+
+#ifndef NO_FILL_TEXT_BACKGROUND
+            if ( glyphPrintMode == FILL_TEXT_BACKGROUND && prev != y ) {
+                setColor(bg);
+                if ( prev < 0 ) {
+                    fillRectangle(xx, yy, glyphWidth + 1, mTop + 1);
+                } else {
+                    hLine(xx, offsetTop + y, hEdge);
+                }
+                if ( !clean ) {
+                    setColor(fg);
+                }
+                prev = y;
+            }
+#endif
+
+            for ( uint8_t j = 0; j < 8; j++ ) {
+                if ( x + j == effWidth ) {
+                    x = -j;
+                    y++;
+#ifndef NO_FILL_TEXT_BACKGROUND
+                    if ( glyphPrintMode == FILL_TEXT_BACKGROUND && prev != y ) {
+                        setColor(bg);
+                        hLine(xx, offsetTop + y, hEdge);
+                        if ( !clean ) {
+                            setColor(fg);
+                        }
+                        prev = y;
+                    }
+#endif
+                }
+                int mask = 1 << (7 - j);
+                if ( (b & mask) == 0 ) {
+                    drawPixel(offsetLeft + x + j, offsetTop + y);
+                }
+            }
+#ifndef NO_FILL_TEXT_BACKGROUND
+            last = y;
+#endif
+        }
+
+#ifndef NO_FILL_TEXT_BACKGROUND
+        if ( glyphPrintMode == FILL_TEXT_BACKGROUND ) {
+            setColor(bg);
+            fillRectangle(xx, offsetTop + last + 1, glyphWidth + 1, glyphHeight - mTop - last);
+        }
+#endif
     }
+
+    setColor(fg);
 }
 
 /* Low level */
@@ -1273,9 +1319,10 @@ RGB* PixelsBase::computeColor(RGB* bg, double alpha) {
     if ( alpha > 1 ) {
         alpha = 1;
     }
-    computedBgColor->red = (int)(bg->red * (1 - alpha) + foreground->red * alpha);
-    computedBgColor->green = (int)(bg->green * (1 - alpha) + foreground->green * alpha);
-    computedBgColor->blue = (int)(bg->blue * (1 - alpha) + foreground->blue * alpha);
+    computedBgColor->setColor( (int32_t)(bg->red * (1 - alpha) + foreground->red * alpha),
+        (int32_t)(bg->green * (1 - alpha) + foreground->green * alpha),
+        (int32_t)(bg->blue * (1 - alpha) + foreground->blue * alpha));
+
     return computedBgColor;
 }
 
@@ -1295,9 +1342,8 @@ RGB* PixelsBase::computeColor(RGB* fg, uint8_t opacity) {
     if ( sb > 255 ) {
         sb = 255;
     }
-    computedFgColor->red = sr; // (uint8_t)(sr & 0xFF);
-    computedFgColor->green = sg; // (uint8_t)(sg & 0xFF);
-    computedFgColor->blue = sb; // (uint8_t)(sb & 0xFF);
+    computedFgColor->setColor(sr, sg, sb);
+
     return computedFgColor;
 }
 
@@ -1415,29 +1461,31 @@ void PixelsBase::drawPixel(int16_t x, int16_t y) {
     }
 
     if ( relativeOrigin || currentScroll == 0 ) {
-        if ( currentScroll != 0 ) {
+        if ( currentScroll != 0 && !scrollCleanMode ) {
+            int edge = currentScroll;
             if ( landscape ) {
-                int edge = currentScroll;
-                if ( !scrollCleanMode && x == edge || x > edge ) {
+                if ( x == edge || x > edge ) {
                     return;
                 }
             } else {
-                int edge = currentScroll;
-                if ( !scrollCleanMode && y == edge || y > edge ) {
+                if ( y == edge || y > edge ) {
                     return;
                 }
             }
         }
     } else {
-        if ( !landscape ) {
-            x = (x + deviceHeight + currentScroll);
-            while (x > deviceHeight ) {
-                x -= deviceHeight;
-            }
-        } else {
-            y = (y + deviceHeight + currentScroll);
-            while (y > deviceHeight ) {
-                y -= deviceHeight;
+        if ( currentScroll != 0 ) {
+            switch ( orientation ) {
+            case PORTRAIT:
+            case PORTRAIT_FLIP:
+                y += currentScroll;
+                y %= deviceHeight;
+                break;
+            case LANDSCAPE:
+            case LANDSCAPE_FLIP:
+                x += currentScroll;
+                x %= deviceHeight;
+                break;
             }
         }
     }
