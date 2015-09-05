@@ -195,6 +195,7 @@ protected:
     RGB* textWrapScrollFill;
 #endif
 
+    int16_t getCharWidth(char c);
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
     void drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t yy,
                                int16_t height, prog_uchar* data, int16_t length);
@@ -684,7 +685,7 @@ public:
      * @param  scrollFill background color to pre-fill blank area
      * @see    enableTextWrap(marginLeft,marginRight,int16_t)
      */
-    void enableTextWrapScroll(int16_t marginBottom, RGB* scrollFill) {
+    void enableTextWrapScroll(int16_t marginBottom, RGB* scrollFill = NULL) {
 #ifndef NO_TEXT_WRAP
         textWrapMarginBottom = marginBottom;
         textWrapScrollFill = scrollFill;

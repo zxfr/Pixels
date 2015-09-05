@@ -899,12 +899,12 @@ int16_t PixelsBase::computeBreakPos(String text, int16_t t) {
     int16_t breakPos = -1;
     String s = t == 0 ? text : text.substring(t, text.length());
     int16_t w = getTextWidth(s);
-    if ( w + caretX > width - textWrapMarginRight || text.indexOf('\n') > 0 ) {
+    if ( w + caretX > width - textWrapMarginRight || text.indexOf('\n') >= 0 ) {
         char prev = 0;
         w = 0;
         for ( int16_t j = t; j < text.length(); j++ ) {
             char cc = text.charAt(j);
-            w += getTextWidth(""+cc);
+            w += getCharWidth(cc);
             if ( cc == ' ' && prev != ' ' || cc == '\n' && breakPos >= 0 ) {
                 if ( caretX + w > width - textWrapMarginRight ) {
                     break;
@@ -972,7 +972,7 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
             caretX = textWrapMarginLeft;
             caretY = caretY + glyphHeight + textWrapLineGap;
             if ( textWrapScroll && (orientation == PORTRAIT_FLIP || orientation == PORTRAIT) &&
-                 caretY + glyphHeight + textWrapMarginBottom > height ) {
+                    caretY + glyphHeight + textWrapMarginBottom > height ) {
 
                 RGB* sav = NULL;
                 if ( textWrapScrollFill != NULL ) {
@@ -1082,6 +1082,29 @@ int16_t PixelsBase::getTextBaseline() {
 //    }
 
     return pgm_read_byte_near(currentFont + 4);
+}
+
+int16_t PixelsBase::getCharWidth(char c) {
+    int16_t ptr = HEADER_LENGTH;
+    while ( 1 ) {
+        char cx = (char)(((int)pgm_read_byte_near(currentFont + ptr + 0) << 8) + pgm_read_byte_near(currentFont + ptr + 1));
+        if ( cx == 0 ) {
+          break;
+        }
+        int16_t length = (((int)(pgm_read_byte_near(currentFont + ptr + 2) & 0xff) << 8) + (int)(pgm_read_byte_near(currentFont + ptr + 3) & 0xff));
+
+        if ( cx == c ) {
+            if ( length < 8 ) {
+//						Serial.print( "Invalid "  );
+//						Serial.print( c );
+//						Serial.println( " glyph definition. Font corrupted?" );
+                break;
+            }
+            return 0xff & pgm_read_byte_near(currentFont + ptr + 4);
+        }
+        ptr += length;
+    }
+    return 0;
 }
 
 int16_t PixelsBase::getTextWidth(String text, int8_t kerning[]) {
@@ -1321,6 +1344,10 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t 
 #endif
 
     } else {
+
+        if ( clean ) {
+            setColor(bg);
+        }
 
         for ( int16_t i = 0; i < length; i++ ) {
             int16_t b = 0xff & pgm_read_byte_near(data + 8 + i);
