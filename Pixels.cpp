@@ -1,7 +1,7 @@
 /*
  * Pixels. Graphics library for TFT displays.
  *
- * Copyright (C) 2012-2013  Igor Repinetski
+ * Copyright (C) 2012-2015  Igor Repinetski
  *
  * The code is written in C/C++ for Arduino and can be easily ported to any microcontroller by rewritting the low level pin access functions.
  *
@@ -893,6 +893,38 @@ void PixelsBase::print(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
     printString(xx, yy, text, 0, kerning);
 }
 
+
+#ifndef NO_TEXT_WRAP
+int16_t PixelsBase::computeBreakPos(String text, int16_t t) {
+    int16_t breakPos = -1;
+    String s = t == 0 ? text : text.substring(t, text.length());
+    int16_t w = getTextWidth(s);
+    if ( w + caretX > width - textWrapMarginRight || text.indexOf('\n') > 0 ) {
+        char prev = 0;
+        w = 0;
+        for ( int16_t j = t; j < text.length(); j++ ) {
+            char cc = text.charAt(j);
+            w += getTextWidth(""+cc);
+            if ( cc == ' ' && prev != ' ' || cc == '\n' && breakPos >= 0 ) {
+                if ( caretX + w > width - textWrapMarginRight ) {
+                    break;
+                } else {
+                    breakPos = j;
+                    if ( cc == '\n' ) {
+                        break;
+                    }
+                }
+            } else if ( cc == '\n' ) {
+                breakPos = j;
+                break;
+            }
+            prev = cc;
+        }
+    }
+    return breakPos;
+}
+#endif
+
 void PixelsBase::cleanText(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
     printString(xx, yy, text, 1, kerning);
 }
@@ -915,12 +947,51 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
 
     int16_t glyphHeight = pgm_read_byte_near(currentFont + 3);
 
-    int16_t x1 = xx;
+    caretX = xx;
+    caretY = yy;
+
+    int16_t glyphWidth = 0;
+    int breakPos = -1;
+
+#ifndef NO_TEXT_WRAP
+    boolean relOrigin = isOriginRelative();
+    if ( wrapText ) {
+        breakPos = computeBreakPos(text, 0);
+    }
+#endif
 
     for (int16_t t = 0; t < text.length(); t++) {
         char c = text.charAt(t);
 
-        int16_t width = 0;
+#ifndef NO_TEXT_WRAP
+        if ( t == breakPos ) {
+            if ( c == ' ' || c == '\n' ) {
+                breakPos++;
+                continue;
+            }
+            caretX = textWrapMarginLeft;
+            caretY = caretY + glyphHeight + textWrapLineGap;
+            if ( textWrapScroll && (orientation == PORTRAIT_FLIP || orientation == PORTRAIT) &&
+                 caretY + glyphHeight + textWrapMarginBottom > height ) {
+
+                RGB* sav = NULL;
+                if ( textWrapScrollFill != NULL ) {
+                    sav = getBackground();
+                    setBackground(textWrapScrollFill);
+                }
+                scroll(-(height - caretY - glyphHeight - textWrapMarginBottom), SCROLL_SMOOTH | SCROLL_CLEAN);
+                if ( sav != NULL ) {
+                    setBackground(sav);
+                }
+                setOriginAbsolute();
+                caretY = height - glyphHeight - textWrapMarginBottom;
+            }
+            breakPos = computeBreakPos(text, t);
+        }
+
+        boolean repeat = false;
+#endif
+
         boolean found = false;
         int16_t ptr = HEADER_LENGTH;
         while ( 1 ) {
@@ -937,13 +1008,29 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
 //						Serial.println( " glyph definition. Font corrupted?" );
                     break;
                 }
-                drawGlyph(fontType, clean, x1, yy, glyphHeight, currentFont + ptr, length);
-                width = 0xff & pgm_read_byte_near(currentFont + ptr + 4);
+
+#ifndef NO_TEXT_WRAP
+                if ( wrapText && caretX + glyphWidth > width - textWrapMarginRight ) {
+                    breakPos = t;
+                    repeat = true;
+                    break;
+                }
+#endif
+
+                drawGlyph(fontType, clean, caretX, caretY, glyphHeight, currentFont + ptr, length);
+                glyphWidth = 0xff & pgm_read_byte_near(currentFont + ptr + 4);
                 found = true;
                 break;
             }
             ptr += length;
         }
+
+#ifndef NO_TEXT_WRAP
+        if ( repeat ) {
+            t--;
+            continue;
+        }
+#endif
 
         if ( kerning != NULL && kerning[kernPtr] > -100 ) {
             kern = kerning[kernPtr];
@@ -953,12 +1040,20 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
         }
 
         if ( found ) {
-            x1 += width;
+            caretX += glyphWidth;
             if ( kern > -100 ) {
-                x1+= kern;
+                caretX += kern;
             }
         }
     }
+
+#ifndef NO_TEXT_WRAP
+    if ( relOrigin ) {
+        setOriginRelative();
+    } else {
+        setOriginAbsolute();
+    }
+#endif
 
     setColor(fg);
 }
@@ -1400,7 +1495,6 @@ void PixelsBase::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
         }
 
         currentScroll %= deviceHeight;
-        flipScroll = (deviceHeight - currentScroll) % deviceHeight;
 
         scrollCmd();
 
@@ -1416,33 +1510,16 @@ void PixelsBase::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
                 changed = true;
             }
 
-            int16_t savScroll = currentScroll;
-
-            if ( orientation > LANDSCAPE ) {
-                currentScroll = flipScroll;
-                dy = -dy;
-            }
-
             switch ( orientation ) {
             case PORTRAIT:
             case PORTRAIT_FLIP:
-                if ( dy < 0 ) {
-                    fillRectangle(0, 0, deviceWidth, mdy);
-                } else {
-                    fillRectangle(0, deviceHeight-mdy, deviceWidth, mdy);
-                }
+                fillRectangle(0, deviceHeight-mdy, deviceWidth, mdy);
                 break;
             case LANDSCAPE:
             case LANDSCAPE_FLIP:
-                if ( dy < 0 ) {
-                    fillRectangle(0, 0, mdy, deviceWidth);
-                } else {
-                    fillRectangle(deviceHeight-mdy, 0, mdy, deviceWidth);
-                }
+                fillRectangle(deviceHeight-mdy, 0, mdy, deviceWidth);
                 break;
             }
-
-            currentScroll = savScroll;
 
             if ( changed ) {
                 relativeOrigin = true;
@@ -1477,14 +1554,24 @@ void PixelsBase::drawPixel(int16_t x, int16_t y) {
         if ( currentScroll != 0 ) {
             switch ( orientation ) {
             case PORTRAIT:
-            case PORTRAIT_FLIP:
                 y += currentScroll;
                 y %= deviceHeight;
                 break;
+            case PORTRAIT_FLIP:
+                y -= currentScroll;
+                if ( y < 0 ) {
+                    y += deviceHeight;
+                }
+                break;
             case LANDSCAPE:
-            case LANDSCAPE_FLIP:
                 x += currentScroll;
                 x %= deviceHeight;
+                break;
+            case LANDSCAPE_FLIP:
+                x -= currentScroll;
+                if ( x < 0 ) {
+                    x += deviceHeight;
+                }
                 break;
             }
         }
@@ -1573,12 +1660,23 @@ void PixelsBase::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2)
 
         if ( currentScroll != 0 ) {
             switch ( orientation ) {
-            case PORTRAIT:
             case PORTRAIT_FLIP:
-                y1 += currentScroll;
-                y2 += currentScroll;
-                y1 %= deviceHeight;
-                y2 %= deviceHeight;
+            case PORTRAIT:
+                if ( orientation == PORTRAIT_FLIP ) {
+                    y1 -= currentScroll;
+                    y2 -= currentScroll;
+                    if ( y1 < 0 ) {
+                        y1 += deviceHeight;
+                    }
+                    if ( y2 < 0 ) {
+                        y2 += deviceHeight;
+                    }
+                } else {
+                    y1 += currentScroll;
+                    y2 += currentScroll;
+                    y1 %= deviceHeight;
+                    y2 %= deviceHeight;
+                }
                 if ( y1 > y2 ) {
                     quickFill(color, x1, y1, x2, deviceHeight-1);
                     quickFill(color, x1, 0, x2, y2);
@@ -1586,12 +1684,23 @@ void PixelsBase::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2)
                     quickFill(color, x1, y1, x2, y2);
                 }
                 break;
-            case LANDSCAPE:
             case LANDSCAPE_FLIP:
-                x1 += currentScroll;
-                x2 += currentScroll;
-                x1 %= deviceHeight;
-                x2 %= deviceHeight;
+            case LANDSCAPE:
+                if ( orientation == LANDSCAPE_FLIP ) {
+                    x1 -= currentScroll;
+                    x2 -= currentScroll;
+                    if ( x1 < 0 ) {
+                        x1 += deviceHeight;
+                    }
+                    if ( x2 < 0 ) {
+                        x2 += deviceHeight;
+                    }
+                } else {
+                    x1 += currentScroll;
+                    x2 += currentScroll;
+                    x1 %= deviceHeight;
+                    x2 %= deviceHeight;
+                }
                 if ( x1 > x2 ) {
                     quickFill(color, x1, y1, deviceHeight-1, y2);
                     quickFill(color, 0, y1, x2, y2);

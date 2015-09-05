@@ -1,7 +1,7 @@
 /*
  * Pixels. Graphics library for TFT displays.
  *
- * Copyright (C) 2012-2013  Igor Repinetski
+ * Copyright (C) 2012-2015  Igor Repinetski
  *
  * The code is written in C/C++ for Arduino and can be easily ported to any microcontroller by rewritting the low level pin access functions.
  *
@@ -30,6 +30,7 @@
 
 // #define DISABLE_ANTIALIASING 1
 // #define NO_FILL_TEXT_BACKGROUND 1
+// #define NO_TEXT_WRAP 1
 
 #if defined(__arm__)
 #include <avr/dtostrf.h>
@@ -178,11 +179,29 @@ protected:
     int16_t flipScroll;
     boolean scrollCleanMode;
 
+    int16_t caretX;
+    int16_t caretY;
+
     int8_t glyphPrintMode;
+
+#ifndef NO_TEXT_WRAP
+    boolean wrapText;
+    int16_t textWrapMarginLeft;
+    int16_t textWrapMarginRight;
+    int16_t textWrapLineGap;
+
+    boolean textWrapScroll;
+    int16_t textWrapMarginBottom;
+    RGB* textWrapScrollFill;
+#endif
 
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
     void drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t yy,
                                int16_t height, prog_uchar* data, int16_t length);
+
+#ifndef NO_TEXT_WRAP
+    int16_t computeBreakPos(String text, int16_t t);
+#endif
 
     virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {}
     void setCurrentPixel(RGB* color);
@@ -631,6 +650,64 @@ public:
 #ifndef NO_FILL_TEXT_BACKGROUND
         glyphPrintMode = printMode;
 #endif
+    }
+
+    /**
+     * Enables text line auto wrap
+     * @param  marginLeft start X coordinate of wrapped tex line
+     * @param  marginRight screen space right side, to avoid to print to
+     * @param  lineGap vertical gap between text lines
+     */
+    void enableTextWrap(int16_t marginLeft, int16_t marginRight, int16_t lineGap) {
+#ifndef NO_TEXT_WRAP
+        wrapText = true;
+        textWrapMarginLeft = marginLeft;
+        textWrapMarginRight = marginRight;
+        textWrapLineGap = lineGap;
+#endif
+    }
+
+    /**
+    * Disables text line auto wrap
+    * @see    enableTextWrap(marginLeft,marginRight,int16_t)
+    */
+    void disableTextWrap() {
+#ifndef NO_TEXT_WRAP
+        wrapText = false;
+#endif
+    }
+
+    /**
+     * Enables auto-scroll if a wrapped line does not fit remaining vertical space.
+     * Takes no effect if text wrap is not enabled or by landscape page orientation.
+     * @param  marginBottom bottom screen space, to avoid to print to
+     * @param  scrollFill background color to pre-fill blank area
+     * @see    enableTextWrap(marginLeft,marginRight,int16_t)
+     */
+    void enableTextWrapScroll(int16_t marginBottom, RGB* scrollFill) {
+#ifndef NO_TEXT_WRAP
+        textWrapMarginBottom = marginBottom;
+        textWrapScrollFill = scrollFill;
+        textWrapScroll = true;
+#endif
+    }
+
+    /**
+    * Disables auto-scroll if a wrapped line
+    * @see    enableTextWrapScroll(marginBottom,scrollFill)
+    */
+    void disableTextWrapScroll() {
+#ifndef NO_TEXT_WRAP
+        textWrapScroll = false;
+#endif
+    }
+
+    int16_t getCaretX() {
+        return caretX;
+    }
+
+    int16_t getCaretY() {
+        return caretY;
     }
 
     /**
