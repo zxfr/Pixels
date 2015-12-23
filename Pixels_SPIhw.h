@@ -20,6 +20,10 @@
 
 #include "Pixels.h"
 
+#if defined(ESP8266)
+ #include <SPI.h>
+#endif
+
 #ifdef PIXELS_MAIN
 #error Pixels_SPIhw.h must be included before Pixels_<CONTROLLER>.h
 #endif
@@ -27,25 +31,29 @@
 #ifndef PIXELS_SPIHW_H
 #define PIXELS_SPIHW_H
 
-#define SPI_CLOCK_DIV4 0x00
-#define SPI_CLOCK_DIV16 0x01
-#define SPI_CLOCK_DIV64 0x02
-#define SPI_CLOCK_DIV128 0x03
-#define SPI_CLOCK_DIV2 0x04
-#define SPI_CLOCK_DIV8 0x05
-#define SPI_CLOCK_DIV32 0x06
-#define SPI_CLOCK_DIV64 0x07
+#ifndef ESP8266
+  #define SPI_CLOCK_DIV4 0x00
+  #define SPI_CLOCK_DIV16 0x01
+  #define SPI_CLOCK_DIV64 0x02
+  #define SPI_CLOCK_DIV128 0x03
+  #define SPI_CLOCK_DIV2 0x04
+  #define SPI_CLOCK_DIV8 0x05
+  #define SPI_CLOCK_DIV32 0x06
+  #define SPI_CLOCK_DIV64 0x07
 
-#define SPI_MODE0 0x00
-#define SPI_MODE1 0x04
-#define SPI_MODE2 0x08
-#define SPI_MODE3 0x0C
+  #define SPI_MODE0 0x00
+  #define SPI_MODE1 0x04
+  #define SPI_MODE2 0x08
+  #define SPI_MODE3 0x0C
+
+  #define SPI(X) SPDR=X;while(!(SPSR&_BV(SPIF)))
+
+#endif 
 
 #define SPI_MODE_MASK 0x0C  // CPOL = bit 3, CPHA = bit 2 on SPCR
 #define SPI_CLOCK_MASK 0x03  // SPR1 = bit 1, SPR0 = bit 0 on SPCR
 #define SPI_2XCLOCK_MASK 0x01  // SPI2X = bit 0 on SPSR
 
-#define SPI(X) SPDR=X;while(!(SPSR&_BV(SPIF)))
 
 class SPIhw {
 private:
@@ -150,13 +158,35 @@ void SPIhw::initInterface() {
 
     reset();
 
-    setSPIBitOrder(MSBFIRST);
-    setSPIDataMode(SPI_MODE3);
-  //  setSPIClockDivider(SPI_CLOCK_DIV64);
-    beginSPI();
+    #if defined(ESP8266)
+
+        //SPI.begin();
+        SPI.setClockDivider(SPI_CLOCK_DIV4);
+        SPI.setBitOrder(MSBFIRST);
+        SPI.setDataMode(SPI_MODE0);
+        SPI.setHwCs(false);
+        beginSPI();
+
+    #else
+
+      setSPIBitOrder(MSBFIRST);
+      setSPIDataMode(SPI_MODE3);
+    //  setSPIClockDivider(SPI_CLOCK_DIV64);
+      beginSPI();
+
+    #endif
 }
 
 void SPIhw::writeCmd(uint8_t cmd) {
+
+#if defined(ESP8266)
+  if (eightBit) {
+    GPOC = bitmaskWR; //wr low
+  }
+  GPOC = bitmaskCS; //cs low
+  SPI.write(cmd);
+  GPOS = bitmaskCS; //cs high
+#else  
     if ( eightBit ) {
         *registerWR &= ~bitmaskWR;
     } else {
@@ -167,18 +197,27 @@ void SPIhw::writeCmd(uint8_t cmd) {
         sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
         SPCR |= _BV(SPE);      // Enable SPI again
     }
-
-#if defined(TEENSYDUINO)
+  #if defined(TEENSYDUINO)
     SPI0_SR = SPI_SR_TCF;
     SPI0_PUSHR = cmd;
     while (!(SPI0_SR & SPI_SR_TCF)) ; // wait
-#else
+  #else
     SPDR = cmd;
     while (!(SPSR & _BV(SPIF)));
-#endif
+  #endif
+#endif    
 }
 
 void SPIhw::writeData(uint8_t data) {
+
+ #if defined(ESP8266)
+    if (eightBit) {
+      GPOS = bitmaskWR;
+    }
+    GPOC = bitmaskCS; //cs low
+    SPI.write(data);
+    GPOS = bitmaskCS; //cs high
+ #else      
     if ( eightBit ) {
         *registerWR |= bitmaskWR;
     } else {
@@ -190,60 +229,85 @@ void SPIhw::writeData(uint8_t data) {
         SPCR |= _BV(SPE);      // Enable SPI again
     }
 
-#if defined(TEENSYDUINO)
-    SPI0_SR = SPI_SR_TCF;
-    SPI0_PUSHR = data;
-    while (!(SPI0_SR & SPI_SR_TCF)) ; // wait
-#else
-    SPDR = data;
-    while (!(SPSR & _BV(SPIF)));
+  #if defined(TEENSYDUINO)
+      SPI0_SR = SPI_SR_TCF;
+      SPI0_PUSHR = data;
+      while (!(SPI0_SR & SPI_SR_TCF)) ; // wait  
+  #else
+      SPDR = data;
+      while (!(SPSR & _BV(SPIF)));
+  #endif
 #endif
 }
 
 void SPIhw::beginSPI() {
-  cbi(registerSCL, bitmaskSCL);
-  cbi(registerSDA, bitmaskSDA);
-  digitalWrite(pinCS, HIGH);
+ 
 
-  // Warning: if the SS pin ever becomes a LOW INPUT then SPI
-  // automatically switches to Slave, so the data direction of
-  // the SS pin MUST be kept as OUTPUT.
+  #if defined(ESP8266)
+    SPI.begin();    
+  #else  
 
-  SPCR |= _BV(MSTR);
-  SPCR |= _BV(SPE);
+    cbi(registerSCL, bitmaskSCL);
+    cbi(registerSDA, bitmaskSDA);
+    digitalWrite(pinCS, HIGH);
+      // Warning: if the SS pin ever becomes a LOW INPUT then SPI
+      // automatically switches to Slave, so the data direction of
+      // the SS pin MUST be kept as OUTPUT.
 
-#if defined(TEENSYDUINO)
-  uint32_t ctar = SPI_CTAR_FMSZ(7) |
-          SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0) | SPI_CTAR_DBR;
+      SPCR |= _BV(MSTR);
+      SPCR |= _BV(SPE);
 
-  SPI0_MCR = SPI_MCR_MDIS | SPI_MCR_HALT | SPI_MCR_PCSIS(0x1F);
-  SPI0_CTAR0 = ctar;
-  SPI0_CTAR1 = ctar | SPI_CTAR_FMSZ(8);
-  SPI0_MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F);
-#else
-  DDRB = DDRB | B00000001; // PB0 as OUTPUT
-  PORTB = PORTB | B00000001; // PB0 as HIGH
-#endif
+    #if defined(TEENSYDUINO)
+      uint32_t ctar = SPI_CTAR_FMSZ(7) |
+              SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0) | SPI_CTAR_DBR;
+
+      SPI0_MCR = SPI_MCR_MDIS | SPI_MCR_HALT | SPI_MCR_PCSIS(0x1F);
+      SPI0_CTAR0 = ctar;
+      SPI0_CTAR1 = ctar | SPI_CTAR_FMSZ(8);
+      SPI0_MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F);  
+    #else
+      DDRB = DDRB | B00000001; // PB0 as OUTPUT
+      PORTB = PORTB | B00000001; // PB0 as HIGH
+    #endif
+  #endif    
 }
 
 void SPIhw::endSPI() {
-  SPCR &= ~_BV(SPE);
+  #if defined(ESP8266)
+    SPI.begin();  
+  #else  
+    SPCR &= ~_BV(SPE);
+  #endif
 }
 
 void SPIhw::setSPIBitOrder(uint8_t bitOrder) {
-  if(bitOrder == LSBFIRST) {
-    SPCR |= _BV(DORD);
-  } else {
-    SPCR &= ~(_BV(DORD));
-  }
+
+  #if defined(ESP8266)
+    SPI.setBitOrder(MSBFIRST);
+  #else  
+
+    if(bitOrder == LSBFIRST) {
+      SPCR |= _BV(DORD);
+    } else {
+      SPCR &= ~(_BV(DORD));
+    }
+  #endif  
 }
 
 void SPIhw::setSPIDataMode(uint8_t mode) {
-  SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
+  #if defined(ESP8266)
+    SPI.setDataMode(SPI_MODE0);
+  #else  
+    SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
+  #endif
 }
 
 void SPIhw::setSPIClockDivider(uint8_t rate) {
-  SPCR = (SPCR & ~SPI_CLOCK_MASK) | (rate & SPI_CLOCK_MASK);
-  SPSR = (SPSR & ~SPI_2XCLOCK_MASK) | ((rate >> 2) & SPI_2XCLOCK_MASK);
+   #if defined(ESP8266)
+    SPI.setClockDivider(SPI_CLOCK_DIV4);
+  #else  
+    SPCR = (SPCR & ~SPI_CLOCK_MASK) | (rate & SPI_CLOCK_MASK);
+    SPSR = (SPSR & ~SPI_2XCLOCK_MASK) | ((rate >> 2) & SPI_2XCLOCK_MASK);
+   #endif
 }
 #endif
