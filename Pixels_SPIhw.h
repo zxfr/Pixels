@@ -74,6 +74,7 @@ private:
     void endSPI();
 
     bool eightBit;
+    bool hwCS;
 
 protected:
     void reset() {
@@ -106,6 +107,9 @@ public:
     void setSPIBitOrder(uint8_t bitOrder);
     void setSPIDataMode(uint8_t mode);
     void setSPIClockDivider(uint8_t rate);
+    void setHwCs(bool useHwCs) {
+      hwCS = useHwCs;
+    }
 //    void setSPIEightBit(bool bits) {
 //        eightBit = bits;
 //    }
@@ -125,6 +129,7 @@ public:
         pinRST = rst;
         pinWR = wr;
         eightBit = wr != 255;
+        hwCS = true;
     }
 
     /**
@@ -160,12 +165,13 @@ void SPIhw::initInterface() {
 
     #if defined(ESP8266)
 
-        //SPI.begin();
         SPI.setClockDivider(SPI_CLOCK_DIV4);
-        SPI.setBitOrder(MSBFIRST);
-        SPI.setDataMode(SPI_MODE0);
-        SPI.setHwCs(false);
+        //setSPIClockDivider(SPI_CLOCK_DIV16);
+        setSPIBitOrder(MSBFIRST);
+        setSPIDataMode(SPI_MODE0);
+       
         beginSPI();
+        
 
     #else
 
@@ -181,11 +187,15 @@ void SPIhw::writeCmd(uint8_t cmd) {
 
 #if defined(ESP8266)
   if (eightBit) {
-    GPOC = bitmaskWR; //wr low
+    cbi(GPOC,bitmaskWR); //wr low
   }
-  GPOC = bitmaskCS; //cs low
-  SPI.write(cmd);
-  GPOS = bitmaskCS; //cs high
+  if (hwCS){
+    SPI.write(cmd);
+  } else {
+     cbi(GPOC,bitmaskCS); //cs low 
+     SPI.write(cmd); 
+     sbi(GPOS,bitmaskCS); //cs high
+  } 
 #else  
     if ( eightBit ) {
         *registerWR &= ~bitmaskWR;
@@ -212,11 +222,15 @@ void SPIhw::writeData(uint8_t data) {
 
  #if defined(ESP8266)
     if (eightBit) {
-      GPOS = bitmaskWR;
+      sbi(GPOS,bitmaskWR);
     }
-    GPOC = bitmaskCS; //cs low
-    SPI.write(data);
-    GPOS = bitmaskCS; //cs high
+    if (hwCS){
+      SPI.write(data);
+    } else {
+       cbi(GPOC,bitmaskCS); //cs low 
+       SPI.write(data); 
+       sbi(GPOS,bitmaskCS); //cs high
+    } 
  #else      
     if ( eightBit ) {
         *registerWR |= bitmaskWR;
@@ -244,6 +258,7 @@ void SPIhw::beginSPI() {
  
 
   #if defined(ESP8266)
+    SPI.setHwCs(hwCS);
     SPI.begin();    
   #else  
 
@@ -274,7 +289,7 @@ void SPIhw::beginSPI() {
 
 void SPIhw::endSPI() {
   #if defined(ESP8266)
-    SPI.begin();  
+    SPI.end();  
   #else  
     SPCR &= ~_BV(SPE);
   #endif
@@ -283,7 +298,7 @@ void SPIhw::endSPI() {
 void SPIhw::setSPIBitOrder(uint8_t bitOrder) {
 
   #if defined(ESP8266)
-    SPI.setBitOrder(MSBFIRST);
+    SPI.setBitOrder(bitOrder);
   #else  
 
     if(bitOrder == LSBFIRST) {
@@ -296,7 +311,7 @@ void SPIhw::setSPIBitOrder(uint8_t bitOrder) {
 
 void SPIhw::setSPIDataMode(uint8_t mode) {
   #if defined(ESP8266)
-    SPI.setDataMode(SPI_MODE0);
+    SPI.setDataMode(mode);
   #else  
     SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
   #endif
@@ -304,7 +319,7 @@ void SPIhw::setSPIDataMode(uint8_t mode) {
 
 void SPIhw::setSPIClockDivider(uint8_t rate) {
    #if defined(ESP8266)
-    SPI.setClockDivider(SPI_CLOCK_DIV4);
+    SPI.setClockDivider(rate);
   #else  
     SPCR = (SPCR & ~SPI_CLOCK_MASK) | (rate & SPI_CLOCK_MASK);
     SPSR = (SPSR & ~SPI_2XCLOCK_MASK) | ((rate >> 2) & SPI_2XCLOCK_MASK);
