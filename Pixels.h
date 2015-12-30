@@ -78,6 +78,20 @@
     #define regtype volatile uint32_t
     #define regsize uint32_t
 
+#elif defined(ESP8266)
+    #include "Arduino.h"
+    #include <pgmspace.h>
+    #define cbi(reg, bitmask) GPOC = bitmask
+    #define sbi(reg, bitmask) GPOS = bitmask
+    #define pulse_high(reg, bitmask) sbi(reg, bitmask); cbi(reg, bitmask);
+    #define pulse_low(reg, bitmask) cbi(reg, bitmask); sbi(reg, bitmask);
+
+    #define cport(port, data) port &= data
+    #define sport(port, data) port |= data
+
+    #define regtype volatile uint32_t
+    #define regsize uint32_t
+
 #else
     #define PROGMEM
 
@@ -117,7 +131,11 @@
 
 
 #define ipart(X) ((int16_t)(X))
-#define round(X) ((uint16_t)(((double)(X))+0.5))
+
+#ifndef ESP8266
+    #define round(X) ((uint16_t)(((double)(X))+0.5))
+#endif
+ 
 #define fpart(X) (((double)(X))-(double)ipart(X))
 #define rfpart(X) (1.0-fpart(X))
 

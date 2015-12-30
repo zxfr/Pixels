@@ -1,21 +1,28 @@
-#include <Pixels_PPI16.h>
-#include <Pixels_Antialiasing.h>  // optional (a removal does not impact fonts antialiasing)
-#include <Pixels_HX8352.h>
+//#include <Pixels_PPI16.h>
+//#include <Pixels_Antialiasing.h>  // optional (a removal does not impact fonts antialiasing)
+//#include <Pixels_HX8352.h>
 
-Pixels pxs(240, 400);
+//Pixels pxs(240, 400);
 
-//#include <Pixels_Antialiasing.h>
-//#include <Pixels_SPIsw.h>
-//#include <Pixels_ILI9341.h>
+#include <Pixels_Antialiasing.h>
+#include <Pixels_SPIsw.h>
+#include <Pixels_ILI9341.h>
 
-//Pixels pxs(240, 320);
+Pixels pxs(240, 320);
 
 extern prog_uchar Eurostile13a[494] PROGMEM;
 extern prog_uchar Verdana8[637] PROGMEM;
 
+#define TFT_CLK D5
+#define TFT_MOSI D7
+#define TFT_DC D4
+#define TFT_CS D1
+#define TFT_RST D2
+
 
 	void setup() {
 		pxs.init();
+    pxs.setSpiPins(TFT_CLK,TFT_MOSI,TFT_CS,TFT_RST,TFT_DC);
 		int delayCounter = 0;
 		long start = millis();
 		int orientation = pxs.getOrientation();

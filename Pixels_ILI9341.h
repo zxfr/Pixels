@@ -43,7 +43,13 @@ class Pixels : public PixelsBase
 {
 protected:
     void deviceWriteData(uint8_t high, uint8_t low) {
-        writeData(high, low);
+
+        #if defined(ESP8266)
+            int16_t data = (high<<8) | low; //convert back to 16bit
+            writeData16(data);
+        #else    
+            writeData(high, low);
+        #endif    
     }
 
     void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -135,7 +141,7 @@ void Pixels::init() {
     writeData(0x08);
     writeData(0x82);
     writeData(0x27);
-/*
+
     writeCmd(0xF2);    // 3Gamma Function Disable
     writeData(0x00);
 
@@ -175,7 +181,7 @@ void Pixels::init() {
     writeData(0x31);
     writeData(0x36);
     writeData(0x0F);
-*/
+
     writeCmd(0x11);    //Exit Sleep
     delay(120);
 
@@ -188,8 +194,13 @@ void Pixels::init() {
 void Pixels::scrollCmd() {
     chipSelect();
     writeCmd(0x37);
-    writeData(highByte(currentScroll));
-    writeData(lowByte(currentScroll));
+
+    #if defined(ESP8266)
+        writeData16(currentScroll);
+    #else
+        writeData(highByte(currentScroll));
+        writeData(lowByte(currentScroll));
+    #endif    
     chipDeselect();
 }
 
@@ -205,34 +216,42 @@ void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y
 
     registerSelect();
 
-    uint8_t lo = lowByte(color);
-    uint8_t hi = highByte(color);
+    #if defined(ESP8266)
 
-    for (int16_t i = 0; i < counter / 20; i++) {
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-        writeData(hi);writeData(lo);
-    }
-    for (int32_t i = 0; i < counter % 20; i++) {
-        writeData(hi);writeData(lo);
-    }
+         uint8_t colorBin[] = { (uint8_t) (color >> 8), (uint8_t) color };
+         writeDataPattern(&colorBin[0], 2, counter);
+
+    #else
+
+        uint8_t lo = lowByte(color);
+        uint8_t hi = highByte(color);
+
+        for (int16_t i = 0; i < counter / 20; i++) {
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+            writeData(hi);writeData(lo);
+        }
+        for (int32_t i = 0; i < counter % 20; i++) {
+            writeData(hi);writeData(lo);
+        }
+    #endif    
 
     chipDeselect();
 }
@@ -273,16 +292,31 @@ void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
         }
     }
 
-    writeCmd(0x2a);
-    writeData(x1>>8);
-    writeData(x1);
-    writeData(x2>>8);
-    writeData(x2);
-    writeCmd(0x2b);
-    writeData(y1>>8);
-    writeData(y1);
-    writeData(y2>>8);
-    writeData(y2);
-    writeCmd(0x2c);
+    #if defined(ESP8266)
+
+        uint8_t buffC[] = { (uint8_t) (x1 >> 8), (uint8_t) x1, (uint8_t) (x2 >> 8), (uint8_t) x2 };
+        uint8_t buffP[] = { (uint8_t) (y1 >> 8), (uint8_t) y1, (uint8_t) (y2 >> 8), (uint8_t) y2 };
+
+        writeCmd(0x2a);
+        writeDataBytes(&buffC[0], sizeof(buffC));
+        writeCmd(0x2b);
+        writeDataBytes(&buffP[0], sizeof(buffP));
+        writeCmd(0x2c);
+
+    #else 
+
+        writeCmd(0x2a);
+        writeData(x1>>8);
+        writeData(x1);
+        writeData(x2>>8);
+        writeData(x2);
+        writeCmd(0x2b);
+        writeData(y1>>8);
+        writeData(y1);
+        writeData(y2>>8);
+        writeData(y2);
+        writeCmd(0x2c);
+
+    #endif    
 }
 #endif
