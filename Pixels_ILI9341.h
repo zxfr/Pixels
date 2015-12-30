@@ -44,7 +44,7 @@ class Pixels : public PixelsBase
 protected:
     void deviceWriteData(uint8_t high, uint8_t low) {
 
-        #if defined(ESP8266)
+        #if defined(ESP8266) && defined(PIXELS_SPIHW_H)
             int16_t data = (high<<8) | low; //convert back to 16bit
             writeData16(data);
         #else    
@@ -195,7 +195,7 @@ void Pixels::scrollCmd() {
     chipSelect();
     writeCmd(0x37);
 
-    #if defined(ESP8266)
+    #if defined(ESP8266) && defined(PIXELS_SPIHW_H)
         writeData16(currentScroll);
     #else
         writeData(highByte(currentScroll));
@@ -216,7 +216,7 @@ void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y
 
     registerSelect();
 
-    #if defined(ESP8266)
+    #if defined(ESP8266) && defined(PIXELS_SPIHW_H)
 
          uint8_t colorBin[] = { (uint8_t) (color >> 8), (uint8_t) color };
          writeDataPattern(&colorBin[0], 2, counter);
@@ -292,7 +292,7 @@ void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
         }
     }
 
-    #if defined(ESP8266)
+    #if defined(ESP8266) && defined(PIXELS_SPIHW_H)
 
         uint8_t buffC[] = { (uint8_t) (x1 >> 8), (uint8_t) x1, (uint8_t) (x2 >> 8), (uint8_t) x2 };
         uint8_t buffP[] = { (uint8_t) (y1 >> 8), (uint8_t) y1, (uint8_t) (y2 >> 8), (uint8_t) y2 };

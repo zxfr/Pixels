@@ -131,20 +131,20 @@ void SPIsw::busWrite(uint8_t data) {
     uint8_t c = 8;
     do {
         if (data & 0x80) {
-            *registerSDA |= bitmaskSDA;
+            sbi(registerSDA,bitmaskSDA);
         } else {
-           *registerSDA &= ~bitmaskSDA;
+           cbi(registerSDA,bitmaskSDA);
         }
         data = data<<1;
-        *registerSCL &= ~bitmaskSCL;
+        cbi(registerSCL,bitmaskSCL);
         asm ("nop");
-        *registerSCL |= bitmaskSCL;
+        sbi(registerSCL,bitmaskSCL);
     } while (--c > 0);
 }
 
 void SPIsw::writeCmd(uint8_t cmd) {
     if ( eightBit ) {
-        *registerWR &= ~bitmaskWR;
+        cbi(registerWR,bitmaskWR);
     } else {
         cbi(registerSDA, bitmaskSDA);
         cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
@@ -155,7 +155,7 @@ void SPIsw::writeCmd(uint8_t cmd) {
 
 void SPIsw::writeData(uint8_t data) {
     if ( eightBit ) {
-        *registerWR |= bitmaskWR;
+        sbi(registerWR,bitmaskWR);
     } else {
         sbi(registerSDA, bitmaskSDA);
         cbi(registerSCL, bitmaskSCL);   // Pull SPI SCK high
