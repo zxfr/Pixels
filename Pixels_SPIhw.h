@@ -27,25 +27,10 @@
 #ifndef PIXELS_SPIHW_H
 #define PIXELS_SPIHW_H
 
-#define SPI_CLOCK_DIV4 0x00
-#define SPI_CLOCK_DIV16 0x01
-#define SPI_CLOCK_DIV64 0x02
-#define SPI_CLOCK_DIV128 0x03
-#define SPI_CLOCK_DIV2 0x04
-#define SPI_CLOCK_DIV8 0x05
-#define SPI_CLOCK_DIV32 0x06
-#define SPI_CLOCK_DIV64 0x07
-
-#define SPI_MODE0 0x00
-#define SPI_MODE1 0x04
-#define SPI_MODE2 0x08
-#define SPI_MODE3 0x0C
-
-#define SPI_MODE_MASK 0x0C  // CPOL = bit 3, CPHA = bit 2 on SPCR
-#define SPI_CLOCK_MASK 0x03  // SPR1 = bit 1, SPR0 = bit 0 on SPCR
-#define SPI_2XCLOCK_MASK 0x01  // SPI2X = bit 0 on SPSR
-
 #define SPI(X) SPDR=X;while(!(SPSR&_BV(SPIF)))
+
+//#undef chipDeselect
+//#define chipDeselect()
 
 class SPIhw {
 private:
@@ -66,6 +51,12 @@ private:
     void endSPI();
 
     bool eightBit;
+
+    uint32_t ctar0;
+    uint32_t ctar1;
+
+    void updatectars();
+    int spiModeRequest;
 
 protected:
     void reset() {
@@ -147,16 +138,27 @@ void SPIhw::initInterface() {
     pinMode(pinWR,OUTPUT);
     pinMode(pinRST,OUTPUT);
     pinMode(pinCS,OUTPUT);
+    digitalWrite(pinCS, HIGH);
 
     reset();
 
-    setSPIBitOrder(MSBFIRST);
-    setSPIDataMode(SPI_MODE3);
-  //  setSPIClockDivider(SPI_CLOCK_DIV64);
     beginSPI();
+
+    if ( spiModeRequest > 0 ) {
+        setSPIDataMode(spiModeRequest-1);
+    }
+
+  //  setSPIBitOrder(MSBFIRST);
+  //  setSPIDataMode(SPI_MODE0);
+  //  setSPIClockDivider(SPI_CLOCK_DIV64);
+
 }
 
 void SPIhw::writeCmd(uint8_t cmd) {
+#if defined(TEENSYDUINO)
+    chipSelect();
+#endif
+
     if ( eightBit ) {
         *registerWR &= ~bitmaskWR;
     } else {
@@ -172,6 +174,7 @@ void SPIhw::writeCmd(uint8_t cmd) {
     SPI0_SR = SPI_SR_TCF;
     SPI0_PUSHR = cmd;
     while (!(SPI0_SR & SPI_SR_TCF)) ; // wait
+    chipDeselect();
 #else
     SPDR = cmd;
     while (!(SPSR & _BV(SPIF)));
@@ -179,6 +182,10 @@ void SPIhw::writeCmd(uint8_t cmd) {
 }
 
 void SPIhw::writeData(uint8_t data) {
+#if defined(TEENSYDUINO)
+    chipSelect();
+#endif
+
     if ( eightBit ) {
         *registerWR |= bitmaskWR;
     } else {
@@ -194,6 +201,7 @@ void SPIhw::writeData(uint8_t data) {
     SPI0_SR = SPI_SR_TCF;
     SPI0_PUSHR = data;
     while (!(SPI0_SR & SPI_SR_TCF)) ; // wait
+    chipDeselect();
 #else
     SPDR = data;
     while (!(SPSR & _BV(SPIF)));
@@ -201,49 +209,76 @@ void SPIhw::writeData(uint8_t data) {
 }
 
 void SPIhw::beginSPI() {
-  cbi(registerSCL, bitmaskSCL);
-  cbi(registerSDA, bitmaskSDA);
-  digitalWrite(pinCS, HIGH);
 
-  // Warning: if the SS pin ever becomes a LOW INPUT then SPI
-  // automatically switches to Slave, so the data direction of
-  // the SS pin MUST be kept as OUTPUT.
+    digitalWrite(pinCS, HIGH);
+    pinMode(pinCS, OUTPUT);
 
-  SPCR |= _BV(MSTR);
-  SPCR |= _BV(SPE);
+    cbi(registerSCL, bitmaskSCL);
+    cbi(registerSDA, bitmaskSDA);
+    digitalWrite(pinCS, HIGH);
 
 #if defined(TEENSYDUINO)
-  uint32_t ctar = SPI_CTAR_FMSZ(7) |
-          SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_CSSCK(0) | SPI_CTAR_DBR;
+    // Warning: if the SS pin ever becomes a LOW INPUT then SPI
+    // automatically switches to Slave, so the data direction of
+    // the SS pin MUST be kept as OUTPUT.
 
-  SPI0_MCR = SPI_MCR_MDIS | SPI_MCR_HALT | SPI_MCR_PCSIS(0x1F);
-  SPI0_CTAR0 = ctar;
-  SPI0_CTAR1 = ctar | SPI_CTAR_FMSZ(8);
-  SPI0_MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F);
+    SIM_SCGC6 |= SIM_SCGC6_SPI0;
+    SPI0_MCR = SPI_MCR_MDIS | SPI_MCR_HALT | SPI_MCR_PCSIS(0x1F);
+    SPI0_CTAR0 = (SPI_CTAR_FMSZ(7) |
+                SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_DBR | SPI_CTAR_CSSCK(0)) & ~SPI_CTAR_LSBFE;
+                // SPI_CTAR_PBR(0) | SPI_CTAR_BR(1) | SPI_CTAR_CSSCK(1);
+    SPI0_CTAR1 = (SPI_CTAR_FMSZ(15) |
+                SPI_CTAR_PBR(0) | SPI_CTAR_BR(0) | SPI_CTAR_DBR | SPI_CTAR_CSSCK(0)) & ~SPI_CTAR_LSBFE;
+                // SPI_CTAR_PBR(0) | SPI_CTAR_BR(1) | SPI_CTAR_CSSCK(1);
+    SPI0_MCR = SPI_MCR_MSTR | SPI_MCR_PCSIS(0x1F);
+//    SPCR.enable_pins(); // pins managed by SPCRemulation in avr_emulation.h
 #else
-  DDRB = DDRB | B00000001; // PB0 as OUTPUT
-  PORTB = PORTB | B00000001; // PB0 as HIGH
+    SPCR |= _BV(MSTR);
+    SPCR |= _BV(SPE);
+
+    DDRB = DDRB | B00000001; // PB0 as OUTPUT
+    PORTB = PORTB | B00000001; // PB0 as HIGH
 #endif
 }
 
 void SPIhw::endSPI() {
+#if defined(TEENSYDUINO)
+//    SPCR.disable_pins();
+    SPI0_MCR = SPI_MCR_MDIS | SPI_MCR_HALT | SPI_MCR_PCSIS(0x1F);
+#else
   SPCR &= ~_BV(SPE);
+#endif
 }
 
 void SPIhw::setSPIBitOrder(uint8_t bitOrder) {
-  if(bitOrder == LSBFIRST) {
-    SPCR |= _BV(DORD);
-  } else {
-    SPCR &= ~(_BV(DORD));
-  }
+#if defined(TEENSYDUINO)
+    // TODO
+#else
+    if(bitOrder == LSBFIRST) {
+      SPCR |= _BV(DORD);
+    } else {
+      SPCR &= ~(_BV(DORD));
+    }
+#endif
 }
 
 void SPIhw::setSPIDataMode(uint8_t mode) {
-  SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
+#if defined(TEENSYDUINO)
+    spiModeRequest = mode + 1;
+    SIM_SCGC6 |= SIM_SCGC6_SPI0;
+    SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
+#else
+    SPCR = (SPCR & ~SPI_MODE_MASK) | mode;
+#endif
 }
 
 void SPIhw::setSPIClockDivider(uint8_t rate) {
-  SPCR = (SPCR & ~SPI_CLOCK_MASK) | (rate & SPI_CLOCK_MASK);
-  SPSR = (SPSR & ~SPI_2XCLOCK_MASK) | ((rate >> 2) & SPI_2XCLOCK_MASK);
-}
+#if defined(TEENSYDUINO)
+    // TODO
+#else
+    SPCR = (SPCR & ~SPI_CLOCK_MASK) | (rate & SPI_CLOCK_MASK);
+    SPSR = (SPSR & ~SPI_2XCLOCK_MASK) | ((rate >> 2) & SPI_2XCLOCK_MASK);
 #endif
+}
+
+#endif // PIXELS_SPIHW_H

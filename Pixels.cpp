@@ -54,13 +54,14 @@ PixelsBase::PixelsBase(uint16_t width, uint16_t height) {
     deviceHeight = width > height ? width : height;
     this->width = width;
     this->height = height;
-    orientation = width > height ? LANDSCAPE : PORTRAIT;
+    setOrientation( width > height ? LANDSCAPE : PORTRAIT );
 
     relativeOrigin = true;
 
     currentScroll = 0;
     scrollSupported = true;
     scrollEnabled = true;
+    extraScrollDelay = 0;
 
     lineWidth = 1;
     fillDirection = 0;
@@ -70,13 +71,20 @@ PixelsBase::PixelsBase(uint16_t width, uint16_t height) {
     bgBuffer = new RGB(0, 0, 0);
     fgBuffer = new RGB(0, 0, 0);
 
+    gfxOpNestingDepth = 0;
+
     setBackground(0,0,0);
     setColor(0xFF,0xFF,0xFF);
 }
 
 void PixelsBase::setOrientation( uint8_t direction ){
 
+    if ( (orientation < 2 && direction > 1) || (orientation > 1 && direction < 2) ) {
+        currentScroll = 2 * deviceHeight - currentScroll;
+        currentScroll %= deviceHeight;
+    }
     orientation = direction;
+
     landscape = false;
 
     switch ( orientation ) {
@@ -101,10 +109,13 @@ void PixelsBase::setOrientation( uint8_t direction ){
 /*  Graphic primitives */
 
 void PixelsBase::clear() {
+    boolean s = relativeOrigin;
+    relativeOrigin = false;
     RGB* sav = getColor();
     setColor(background);
     fillRectangle(0, 0, width, height);
     setColor(sav);
+    relativeOrigin = s;
 }
 
 RGB* PixelsBase::getPixel(int16_t x, int16_t y) {
@@ -112,6 +123,8 @@ RGB* PixelsBase::getPixel(int16_t x, int16_t y) {
 }
 
 void PixelsBase::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+
+    beginGfxOperation();
 
     if (y1 == y2 && lineWidth == 1) {
         hLine(x1, y1, x2);
@@ -167,17 +180,23 @@ void PixelsBase::drawLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
             drawFatLineAntialiased(x1, y1, x2, y2);
         }
     }
+
+    endGfxOperation();
 }
 
 void PixelsBase::drawRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
+    beginGfxOperation();
     hLine(x, y, x+width-2);
     vLine(x+width-1, y, y+height-2);
     hLine(x+1, y+height-1, x+width-1);
     vLine(x, y+1, y+height-1);
+    endGfxOperation();
 }
 
 void PixelsBase::fillRectangle(int16_t x, int16_t y, int16_t width, int16_t height) {
+    beginGfxOperation();
     fill(foreground->convertTo565(), x, y, x+width-1, y+height-1);
+    endGfxOperation();
 }
 
 void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius) {
@@ -193,6 +212,8 @@ void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
     if ( radius > width >> 1 ) {
         radius = width >> 1;
     }
+
+    beginGfxOperation();
 
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x, y, width, height, radius, radius, 0);
@@ -236,6 +257,8 @@ void PixelsBase::drawRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
             drawPixel(xx - y1, yy - x1);
         }
     }
+
+    endGfxOperation();
 }
 
 void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t height, int16_t radius) {
@@ -251,6 +274,8 @@ void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
     if ( radius > width >> 1 ) {
         radius = width >> 1;
     }
+
+    beginGfxOperation();
 
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x, y, width-1, height-1, radius, radius, true);
@@ -294,11 +319,13 @@ void PixelsBase::fillRoundRectangle(int16_t x, int16_t y, int16_t width, int16_t
         hLine(xx - x1, yy + y1 + shiftY, xx);
         hLine(xx - y1, yy + x1 + shiftY, xx);
     }
+
+    endGfxOperation();
 }
 
 void PixelsBase::drawCircle(int16_t x, int16_t y, int16_t r) {
 
-    drawOval(x-r, y-r, x+r, y-r);
+    drawOval(x-r, y-r, r<<1, r<<1);
 
 //    if ( antialiasing ) {
 //        drawCircleAntialiaced(x, y, r, false);
@@ -336,10 +363,10 @@ void PixelsBase::drawCircle(int16_t x, int16_t y, int16_t r) {
 }
 
 void PixelsBase::fillCircle(int16_t x, int16_t y, int16_t r) {
-    int16_t yy;
-    int16_t xx;
+//    int16_t yy;
+//    int16_t xx;
 
-    fillOval(x-r, y-r, x+r, y-r);
+    fillOval(x-r, y-r, r<<1, r<<1);
 
 //    if ( antialiasing ) {
 //        drawCircleAntialiaced(x, y, r, true);
@@ -355,6 +382,12 @@ void PixelsBase::fillCircle(int16_t x, int16_t y, int16_t r) {
 }
 
 void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
+
+    if ((width <= 0) || (height <= 0)) {
+        return;
+    }
+
+    beginGfxOperation();
 
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x, y, width, height, width/2, height/2, 0);
@@ -376,16 +409,14 @@ void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
         int16_t xx = x + rx;
         int16_t yy = y + ry;
 
-        if ((width <= 0) || (height <= 0)) {
-            return;
-        }
-
         if (width == 1) {
             vLine(xx, yy, yy + height - 1);
+            endGfxOperation();
             return;
         }
         if (height == 1) {
             hLine(xx, yy, xx + width - 1);
+            endGfxOperation();
             return;
         }
 
@@ -483,6 +514,8 @@ void PixelsBase::drawOval(int16_t x, int16_t y, int16_t width, int16_t height) {
             } while (i > h);
         }
     }
+
+    endGfxOperation();
 }
 
 void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height) {
@@ -517,6 +550,8 @@ void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height)
         hLine(xx, yy, xx + width);
         return;
     }
+
+    beginGfxOperation();
 
     if ( antialiasing ) {
         drawRoundRectangleAntialiased(x-rx, y-ry, rx<<1, ry<<1, rx, ry, true);
@@ -599,6 +634,8 @@ void PixelsBase::fillOval(int16_t xx, int16_t yy, int16_t width, int16_t height)
 
         } while (i > h);
     }
+
+    endGfxOperation();
 }
 
 void PixelsBase::drawIcon(int16_t xx, int16_t yy, prog_uchar* data) {
@@ -612,7 +649,9 @@ void PixelsBase::drawIcon(int16_t xx, int16_t yy, prog_uchar* data) {
 
     int16_t height =  pgm_read_byte_near(data + 4);
 
+    beginGfxOperation();
     drawGlyph(fontType, false, xx, yy, height, data + 1, length-1);
+    endGfxOperation();
 }
 
 void PixelsBase::cleanIcon(int16_t xx, int16_t yy, prog_uchar* data) {
@@ -626,57 +665,90 @@ void PixelsBase::cleanIcon(int16_t xx, int16_t yy, prog_uchar* data) {
 
     int16_t height =  pgm_read_byte_near(data + 4);
 
+    beginGfxOperation();
     drawGlyph(fontType, true, xx, yy, height, data + 1, length-1);
+    endGfxOperation();
 }
 
 int8_t PixelsBase::drawBitmap(int16_t x, int16_t y, int16_t width, int16_t height, prog_uint16_t* data) {
-    chipSelect();
-    setRegion(x, y, x+width-1, y+height-1);
+
+    Bounds bb(x, y, x+width-1, y+height-1);
+    if( !transformBounds(bb) ) {
+        return 1;
+    }
+
+    if( !checkBounds(bb) ) {
+        return 1;
+    }
+
+    beginGfxOperation();
+    setRegion(bb.x1, bb.y1, bb.x2, bb.y2);
+
+    int sc = currentScroll;
+    if ( sc == 0 ) {
+        sc = deviceHeight;
+    }
 
     switch( orientation ) {
     case PORTRAIT:
         {
-            int32_t ptr = 0;
-            int32_t size = width * height;
-            while ( ptr++ < size ) {
-                int16_t px = pgm_read_word_near(data + ptr);
-                setCurrentPixel(px);
-            }
-        }
-        break;
-    case LANDSCAPE_FLIP:
-        for ( int16_t i = width - 1; i >= 0; i-- ) {
-            for ( int16_t j = 0; j < height; j++ ) {
-                int16_t px = pgm_read_word_near(data + j * width + i);
-                setCurrentPixel(px);
+            for ( int16_t j = bb.y1; j <= bb.y2; j++ ) {
+                for ( int16_t i = bb.x1; i <= bb.x2; i++ ) {
+                    int16_t px = pgm_read_word_near(data + (j - y) * width + i - x);
+                    setCurrentPixel(px);
+                }
             }
         }
         break;
     case LANDSCAPE:
-        for ( int16_t i = 0; i < width; i++ ) {
-            for ( int16_t j = height - 1; j >= 0; j-- ) {
-                int16_t px = pgm_read_word_near(data + j * width + i);
-                setCurrentPixel(px);
+        {
+            int h1 = height - max(0, (y + height) - deviceWidth) - 1;
+            int w1 = width - max(0, (x + width) - sc) - 1;
+            int w = bb.x2 - bb.x1 + 1;
+            int h = bb.y2 - bb.y1 + 1;
+            for ( int16_t j = h - 1; j >= 0; j-- ) {
+                for ( int16_t i = 0; i < w; i++ ) {
+                    int16_t px = pgm_read_word_near(data + (h1 - i) * width + (w1 - j));
+                    setCurrentPixel(px);
+                }
             }
         }
         break;
     case PORTRAIT_FLIP:
         {
-            int32_t ptr = width * height;
-            while ( ptr-- >= 0 ) {
-                int16_t px = pgm_read_word_near(data + ptr);
-                setCurrentPixel(px);
+            int h = bb.y2 - bb.y1 + 1;
+            int w = bb.x2 - bb.x1 + 1;
+            int cutH = y < 0 ? 0 : height - h;
+            int cutW = x < 0 ? 0 : width - w;
+            for ( int16_t j = 0; j < h; j++ ) {
+                for ( int16_t i = 0; i < w; i++ ) {
+                    int16_t px = pgm_read_word_near(data + (height - j - 1 - cutH) * width + (width - i - 1 - cutW));
+                    setCurrentPixel(px);
+                }
             }
         }
-
+        break;
+    case LANDSCAPE_FLIP:
+        {
+            int h1 = height - max(0, (y + height) - deviceWidth) - 1;
+            int w1 = width - max(0, (x + width) - sc) - 1;
+            int w = bb.x2 - bb.x1 + 1;
+            int h = bb.y2 - bb.y1 + 1;
+            for ( int16_t j = 0; j < h; j++ ) {
+                for ( int16_t i = w - 1; i >= 0; i-- ) {
+                    int16_t px = pgm_read_word_near(data + (h1 - i) * width + (w1 - j));
+                    setCurrentPixel(px);
+                }
+            }
+        }
         break;
     }
 
-    chipDeselect();
+    endGfxOperation();
     return 0;
 }
 
-int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data) {
+int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, prog_uchar* data) {
 
     if ( data == NULL ) {
         return -1;
@@ -725,21 +797,13 @@ int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data) {
     uint8_t buf;
     bool bufEmpty = true;
 
-    int* raster;
+    int* raster = NULL;
     int rasterPtr = 0;
-    int rasterLine = 0;
+    int rasterLine = y;
 
-    if ( orientation != PORTRAIT ) {
-        raster = new int[width];
-    }
+    raster = new int[width];
 
-    chipSelect();
-
-    if( orientation == PORTRAIT ) {
-        setRegion(x, y, x + width - 1, y + height - 1);
-    } else {
-        rasterLine = y;
-    }
+    beginGfxOperation();
 
     BitStream bs( data, compressedLen, 96 );
     while ( true ) {
@@ -754,24 +818,38 @@ int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data) {
                 uint16_t px = buf;
                 px <<= 8;
                 px |= bits;
-                if ( orientation == PORTRAIT ) {
-                    setCurrentPixel(px);
-                } else {
-                    raster[rasterPtr++] = px;
-                    if ( rasterPtr == width ) {
-                        setRegion(x, rasterLine, x + width - 1, rasterLine);
-                        rasterLine++;
-                        if( orientation == LANDSCAPE ) {
-                            for ( int i = 0; i < width; i++ ) {
+                raster[rasterPtr++] = px;
+                if ( rasterPtr == width ) {
+                    Bounds bb(x, rasterLine, x + width - 1, rasterLine);
+                    if( transformBounds(bb) && checkBounds(bb) ) {
+                        setRegion(bb.x1, bb.y1, bb.x2, bb.y2);
+
+                        int ww = width;
+                        int corr = 0;
+                        if (bb.x1 == bb.x2) {
+                            ww = bb.y2 - bb.y1 + 1;
+                        } else {
+                            ww = bb.x2 - bb.x1 + 1;
+                        }
+
+                        if (x < 0) {
+                            corr = -x;
+                            ww += corr;
+                        }
+
+                        if ( orientation < 2 ) {
+                            for ( int i = corr; i < ww; i++ ) {
                                 setCurrentPixel(raster[i]);
                             }
                         } else {
-                            for ( int i = width - 1; i >= 0; i-- ) {
+                            for ( int i = min(width, ww - 1); i >= corr; i-- ) {
                                 setCurrentPixel(raster[i]);
                             }
                         }
-                        rasterPtr = 0;
                     }
+
+                    rasterLine++;
+                    rasterPtr = 0;
                 }
                 bufEmpty = true;
             }
@@ -806,24 +884,40 @@ int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data) {
                     uint16_t px = buf;
                     px <<= 8;
                     px |= window[p1];
-                    if ( orientation == PORTRAIT ) {
-                        setCurrentPixel(px);
-                    } else {
-                        raster[rasterPtr++] = px;
-                        if ( rasterPtr == width ) {
-                            setRegion(x, rasterLine, x + width - 1, rasterLine);
-                            rasterLine++;
-                            if( orientation == LANDSCAPE ) {
-                                for ( int i = 0; i < width; i++ ) {
+
+                    raster[rasterPtr++] = px;
+                    if ( rasterPtr == width ) {
+                        Bounds bb(x, rasterLine, x + width - 1, rasterLine);
+                        if( transformBounds(bb) && checkBounds(bb) ) {
+                            setRegion(bb.x1, bb.y1, bb.x2, bb.y2);
+
+                            int corr = 0;
+                            int ww;
+                            if (bb.x1 == bb.x2) {
+                                ww = bb.y2 - bb.y1 + 1;
+                            } else {
+                                ww = bb.x2 - bb.x1 + 1;
+                            }
+
+                            if (x < 0) {
+                                corr = -x;
+                                ww += corr;
+                            }
+
+
+                            if ( orientation < 2 ) {
+                                for ( int i = corr; i < ww; i++ ) {
                                     setCurrentPixel(raster[i]);
                                 }
                             } else {
-                                for ( int i = width - 1; i >= 0; i-- ) {
+                                for ( int i = min(width, ww - 1); i >= corr; i-- ) {
                                     setCurrentPixel(raster[i]);
                                 }
                             }
-                            rasterPtr = 0;
                         }
+
+                        rasterLine++;
+                        rasterPtr = 0;
                     }
                     bufEmpty = true;
                 }
@@ -839,18 +933,16 @@ int8_t PixelsBase::drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data) {
         }
     }
 
-    chipDeselect();
+    delete raster;
 
-    if ( orientation != PORTRAIT ) {
-        delete raster;
-    }
+    endGfxOperation();
 
     return 0;
 }
 
 
 int8_t PixelsBase::loadBitmap(int16_t x, int16_t y, int16_t sx, int16_t sy, String path) {
-    int16_t* data = loadFileBytes( path );
+//    int16_t* data = loadFileBytes( path );
     return 0; // drawBitmap(x, y, sx, sy, data);
 }
 
@@ -890,7 +982,9 @@ int PixelsBase::setFont(prog_uchar font[]) {
 }
 
 void PixelsBase::print(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
+    beginGfxOperation();
     printString(xx, yy, text, 0, kerning);
+    endGfxOperation();
 }
 
 
@@ -902,10 +996,10 @@ int16_t PixelsBase::computeBreakPos(String text, int16_t t) {
     if ( w + caretX > width - textWrapMarginRight || text.indexOf('\n') >= 0 ) {
         char prev = 0;
         w = 0;
-        for ( int16_t j = t; j < text.length(); j++ ) {
+        for ( uint16_t j = t; j < text.length(); j++ ) {
             char cc = text.charAt(j);
             w += getCharWidth(cc);
-            if ( cc == ' ' && prev != ' ' || cc == '\n' && breakPos >= 0 ) {
+            if ( (cc == ' ' && prev != ' ') || (cc == '\n' && breakPos >= 0) ) {
                 if ( caretX + w > width - textWrapMarginRight ) {
                     break;
                 } else {
@@ -926,7 +1020,9 @@ int16_t PixelsBase::computeBreakPos(String text, int16_t t) {
 #endif
 
 void PixelsBase::cleanText(int16_t xx, int16_t yy, String text, int8_t kerning[]) {
+    beginGfxOperation();
     printString(xx, yy, text, 1, kerning);
+    endGfxOperation();
 }
 
 void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[]) {
@@ -960,7 +1056,7 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
     }
 #endif
 
-    for (int16_t t = 0; t < text.length(); t++) {
+    for (uint16_t t = 0; t < text.length(); t++) {
         char c = text.charAt(t);
 
 #ifndef NO_TEXT_WRAP
@@ -984,6 +1080,7 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                     setBackground(sav);
                 }
                 setOriginAbsolute();
+
                 caretY = height - glyphHeight - textWrapMarginBottom;
             }
             breakPos = computeBreakPos(text, t);
@@ -1009,6 +1106,9 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
                     break;
                 }
 
+                glyphWidth = 0xff & pgm_read_byte_near(currentFont + ptr + 4);
+                found = true;
+
 #ifndef NO_TEXT_WRAP
                 if ( wrapText && caretX + glyphWidth > width - textWrapMarginRight ) {
                     breakPos = t;
@@ -1018,8 +1118,6 @@ void PixelsBase::printString(int16_t xx, int16_t yy, String text, boolean clean,
 #endif
 
                 drawGlyph(fontType, clean, caretX, caretY, glyphHeight, currentFont + ptr, length);
-                glyphWidth = 0xff & pgm_read_byte_near(currentFont + ptr + 4);
-                found = true;
                 break;
             }
             ptr += length;
@@ -1085,6 +1183,10 @@ int16_t PixelsBase::getTextBaseline() {
 }
 
 int16_t PixelsBase::getCharWidth(char c) {
+    if ( currentFont == NULL ) {
+        return 0;
+    }
+
     int16_t ptr = HEADER_LENGTH;
     while ( 1 ) {
         char cx = (char)(((int)pgm_read_byte_near(currentFont + ptr + 0) << 8) + pgm_read_byte_near(currentFont + ptr + 1));
@@ -1100,10 +1202,14 @@ int16_t PixelsBase::getCharWidth(char c) {
 //						Serial.println( " glyph definition. Font corrupted?" );
                 break;
             }
+//                Serial.print( c );
+
             return 0xff & pgm_read_byte_near(currentFont + ptr + 4);
         }
+
         ptr += length;
     }
+
     return 0;
 }
 
@@ -1116,7 +1222,7 @@ int16_t PixelsBase::getTextWidth(String text, int8_t kerning[]) {
     int16_t kern = -100; // no kerning
     int16_t x1 = 0;
 
-    for (int16_t t = 0; t < text.length(); t++) {
+    for (uint16_t t = 0; t < text.length(); t++) {
         char c = text.charAt(t);
 
         int16_t width = 0;
@@ -1405,6 +1511,149 @@ void PixelsBase::drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t 
     setColor(fg);
 }
 
+void PixelsBase::scrollText( int16_t x, int16_t y, String text, uint8_t scrollStep, uint8_t repeat, uint16_t maxScroll ) {
+
+    int extraRowDelay = 0; // increase to slow down
+
+    if ( getOrientation() % 2 == 0 ) {
+        setOrientation(LANDSCAPE);
+    }
+
+    if ( repeat != 0  ) {
+        repeat++;
+    }
+
+    int maxX = getWidth() - 1;
+    int tw = getTextWidth(text);
+
+    int skip = -1;
+    int loopLen = tw + x;
+    int space = maxX - x;
+
+    if (getScroll() > 0) {
+        skip = (x - getScroll()) % getWidth();
+        loopLen += maxX - getScroll();
+        space = getScroll() - x;
+    }
+
+    int easingLen = 5;
+    if ( loopLen / 2 < easingLen) {
+        easingLen = loopLen / 2;
+    }
+    loopLen += easingLen;
+
+    int dlx = 8;
+    int factor = 3 + extraRowDelay;
+    int remains = 0;
+
+    long maxLatency = 0;
+    boolean firstLoop = true;
+
+    if ( maxScroll > 0 ) {
+        loopLen = maxScroll;
+        repeat = 2;
+    }
+
+    do {
+        for ( int i = 0; i < loopLen; i+=scrollStep ) {
+
+            long startMillis = millis();
+
+            int p = -1;
+            int e = -1;
+            int xx = 0;
+            int cw = 0;
+
+            int l = 0;
+            int f = 0;
+            for (int t = 0; t < (int)text.length(); t++) {
+                char c = text.charAt(t);
+                f = l;
+                cw = getCharWidth(c);
+                if ( cw < 0 ) {
+                    return;
+                }
+                l += cw;
+                if ( l > remains && p < 0 ) {
+                    xx = f;
+                    p = t;
+                }
+                if ( l > space ) {
+                    e = t + 1;
+                    break;
+                }
+            }
+            if ( p < 0 ) {
+                p = text.length();
+            }
+            if ( e < 0 ) {
+                e = text.length();
+            }
+
+            String s = text.substring(p, e);
+            int q = (x + xx) % getWidth();
+
+            if ( q != 0 || x != getWidth() || getScroll() != 0 ) {
+                if (i > skip) {
+                    print(q, y, s);
+                }
+            }
+            if ( q > maxX - cw && q > getScroll() && getScroll() != 0 ) {
+                print(q - getWidth(), y, s);
+            }
+
+            remains = space;
+            space += scrollStep;
+            scroll(scrollStep, SCROLL_CLEAN);
+
+            long endMillis = millis();
+#ifndef PIXELMEISTER
+            if ( s.length() < 3 ) {
+                long latency = endMillis - startMillis;
+
+                if (maxLatency > latency) {
+                    delay((int)(maxLatency - latency));
+                } else {
+                    if( firstLoop ) {
+                        maxLatency = latency;
+                    }
+                }
+            }
+#endif
+
+            if ( i < easingLen ) {
+                delay(dlx+(easingLen-i)*(easingLen-i)*factor/2);
+            } else {
+                if ( loopLen > 150 ) {
+                    delay(factor);
+                } else {
+                    delay(dlx+factor);
+                }
+            }
+            startMillis = endMillis;
+        }
+
+        firstLoop = false;
+
+        remains = 0;
+        space = 0;
+        easingLen = 0;
+        skip = -1;
+
+        x = getWidth();
+        loopLen = x + tw;
+
+        if ( maxScroll <= 0 ) {
+            scroll(-getScroll(), 0);
+        }
+
+        if ( repeat != 0 ) {
+            repeat--;
+        }
+    } while ( repeat == 0 || repeat > 1 );
+}
+
+
 /* Low level */
 
 void PixelsBase::putColor(int16_t x, int16_t y, boolean steep, double alpha) {
@@ -1483,17 +1732,17 @@ void PixelsBase::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
 
     if (mdy > 1 && (flags & SCROLL_SMOOTH) > 0) {
 
-        int16_t easingLen = 5;
+        int16_t easingLen = 8;
         if ( mdy / 2 < easingLen) {
             easingLen = mdy / 2;
         }
 
-        int16_t dlx = (flags & SCROLL_CLEAN) > 0 ? 8 : 15;
-        int16_t factor = 3;
+        int16_t dlx = (flags & SCROLL_CLEAN) > 0 ? 0 : 7;
+        int16_t factor = 1;
 
         int16_t step = dy < 0 ? -1 : 1;
         for ( int16_t i = 0; i < easingLen; i++ ) {
-            delay(dlx+(easingLen-i)*(easingLen-i)*factor/2);
+            delay(dlx+(easingLen-i)*(easingLen-i)*factor/2+extraScrollDelay);
             scroll(step, x1, x2, flags & SCROLL_CLEAN);
         }
         for ( int16_t i = 0; i < mdy - easingLen*2; i++ ) {
@@ -1501,59 +1750,51 @@ void PixelsBase::scroll(int16_t dy, int16_t x1, int16_t x2, int8_t flags) {
             if ( mdy > 150 ) {
                 delay(factor);
             } else {
-                delay(dlx+factor);
+                delay(dlx+factor+extraScrollDelay);
             }
         }
         for ( int16_t i = 1; i <= easingLen; i++ ) {
             scroll(step, x1, x2, flags & SCROLL_CLEAN);
-            delay(dlx+i*i*factor/2);
+            delay(dlx+i*i*factor/2+extraScrollDelay);
         }
 
     } else {
 
-        if ( orientation > LANDSCAPE ) {
-            dy = -dy;
+        RGB* sav = getColor();
+        setColor(getBackground());
+        boolean savorigin = relativeOrigin;
+        relativeOrigin = false;
+
+        beginGfxOperation();
+
+        if ( (flags & SCROLL_CLEAN) > 0 && dy > 0 ) {
+            if( (orientation % 2) == 0 ) { // PORTRAIT(_FLIP)
+                fillRectangle(0, 0, deviceWidth, mdy);
+            } else {
+                fillRectangle(0, 0, mdy, deviceWidth);
+            }
         }
 
         currentScroll += dy;
-
         while ( currentScroll < 0 ) {
             currentScroll += deviceHeight;
         }
-
         currentScroll %= deviceHeight;
 
         scrollCmd();
 
-        if ( (flags & SCROLL_CLEAN) > 0 ) {
-
-            scrollCleanMode = true;
-            RGB* sav = getColor();
-            setColor(getBackground());
-
-            boolean changed = false;
-            if ( relativeOrigin ) {
-                relativeOrigin = false;
-                changed = true;
+        if ( (flags & SCROLL_CLEAN) > 0 && dy < 0 ) {
+            if( (orientation % 2) == 0 ) { // PORTRAIT(_FLIP)
+                fillRectangle(0, 0, deviceWidth, mdy);
+            } else {
+                fillRectangle(0, 0, mdy, deviceWidth);
             }
-
-            switch ( orientation ) {
-            case PORTRAIT:
-            case PORTRAIT_FLIP:
-                fillRectangle(0, deviceHeight-mdy, deviceWidth, mdy);
-                break;
-            case LANDSCAPE:
-            case LANDSCAPE_FLIP:
-                fillRectangle(deviceHeight-mdy, 0, mdy, deviceWidth);
-                break;
-            }
-
-            if ( changed ) {
-                relativeOrigin = true;
-            }
-            setColor(sav);
-            scrollCleanMode = false;
         }
+
+        relativeOrigin = savorigin;
+        setColor(sav);
+
+        endGfxOperation(true);
     }
 }
 
@@ -1564,183 +1805,100 @@ void PixelsBase::drawPixel(int16_t x, int16_t y) {
         return;
     }
 
-    if ( relativeOrigin || currentScroll == 0 ) {
-        if ( currentScroll != 0 && !scrollCleanMode ) {
-            int edge = currentScroll;
-            if ( landscape ) {
-                if ( x == edge || x > edge ) {
-                    return;
-                }
-            } else {
-                if ( y == edge || y > edge ) {
-                    return;
-                }
+    int xx = x;
+    int yy = y;
+
+    int s = getScroll();
+
+    if ( relativeOrigin ) {
+        switch( orientation ) {
+        case PORTRAIT:
+            if ( s > 0 && y >= s ) {
+                return;
             }
+            break;
+        case LANDSCAPE:
+            if ( s > 0 && x >= s ) {
+                return;
+            }
+            xx = deviceWidth - y - 1;
+            yy = x;
+            break;
+        case PORTRAIT_FLIP:
+            if ( s > 0 && y >= s ) {
+                return;
+            }
+            xx = deviceWidth - x - 1;
+            yy = deviceHeight - y - 1;
+            break;
+        case LANDSCAPE_FLIP:
+            if ( s > 0 && x >= s ) {
+                return;
+            }
+            xx = y;
+            yy = deviceHeight - x - 1;
+            break;
         }
     } else {
-        if ( currentScroll != 0 ) {
-            switch ( orientation ) {
-            case PORTRAIT:
-                y += currentScroll;
-                y %= deviceHeight;
-                break;
-            case PORTRAIT_FLIP:
-                y -= currentScroll;
-                if ( y < 0 ) {
-                    y += deviceHeight;
-                }
-                break;
-            case LANDSCAPE:
-                x += currentScroll;
-                x %= deviceHeight;
-                break;
-            case LANDSCAPE_FLIP:
-                x -= currentScroll;
-                if ( x < 0 ) {
-                    x += deviceHeight;
-                }
-                break;
-            }
+        switch( orientation ) {
+        case PORTRAIT:
+            yy += s;
+            break;
+        case LANDSCAPE:
+            xx = deviceWidth - y - 1;
+            yy = x + s;
+            break;
+        case PORTRAIT_FLIP:
+            xx = deviceWidth - x - 1;
+            yy = 2 * deviceHeight - y - 1 - s;
+            break;
+        case LANDSCAPE_FLIP:
+            xx = y;
+            yy = 2 * deviceHeight - x - 1 - s;
+            break;
         }
+        yy %= deviceHeight;
     }
 
-    chipSelect();
-    setRegion(x, y, x, y);
+    beginGfxOperation();
+    setRegion(xx, yy, xx, yy);
     setCurrentPixel(foreground);
-    chipDeselect();
+    endGfxOperation();
 }
 
 void PixelsBase::fill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
-    if (x2 < x1) {
-        swap(x1, x2);
-    }
-
-    if (y2 < y1) {
-        swap(y1, y2);
-    }
-
-    if ( x1 >= width ) {
+    Bounds bb(x1, y1, x2, y2);
+    if( !transformBounds(bb) ) {
         return;
     }
 
-    if ( y1 >= height ) {
-        return;
-    }
+    beginGfxOperation();
 
-    if ( x1 < 0 ) {
-        if ( x2 < 0 ) {
-            return;
-        }
-        x1 = 0;
-    }
-
-    if ( y1 < 0 ) {
-        if ( y2 < 0 ) {
-            return;
-        }
-        y1 = 0;
-    }
-
-    if ( relativeOrigin || currentScroll == 0 ) {
-        if ( currentScroll != 0 ) {
-            if ( landscape ) {
-                int edge = currentScroll;
-                if (x2 >= edge) {
-                    if ( x1 >= edge ) {
-                        return;
-                    } else  {
-                        x2 = edge - 1;
-                    }
-                }
-                if (y2 >= height) {
-                    y2 = height - 1;
-                }
-            } else {
-                int edge = currentScroll;
-                if (y2 >= edge) {
-                    if ( y1 >= edge ) {
-                        return;
-                    } else  {
-                        y2 = edge - 1;
-                    }
-                }
-                if (x2 >= width) {
-                    x2 = width - 1;
-                }
-            }
-        } else {
-            if (x2 >= width) {
-                x2 = width - 1;
-            }
-            if (y2 >= height) {
-                y2 = height - 1;
-            }
-        }
+    if ( relativeOrigin ) {
+        quickFill(color, bb.x1, bb.y1, bb.x2, bb.y2);
     } else {
-        if ( x2 >= width ) {
-            x2 = width - 1;
+        int s = currentScroll;
+        if ( orientation > 1 ) {
+            s = (deviceHeight - s - 1) % deviceHeight;
+            bb.y1 += s;
+            bb.y2 += s;
+        } else {
+            bb.y1 += s;
+            bb.y2 += s;
         }
-        if ( y2 >= height ) {
-            y2 = height - 1;
-        }
+        bb.y1 %= deviceHeight;
+        bb.y2 %= deviceHeight;
 
-        if ( currentScroll != 0 ) {
-            switch ( orientation ) {
-            case PORTRAIT_FLIP:
-            case PORTRAIT:
-                if ( orientation == PORTRAIT_FLIP ) {
-                    y1 -= currentScroll;
-                    y2 -= currentScroll;
-                    if ( y1 < 0 ) {
-                        y1 += deviceHeight;
-                    }
-                    if ( y2 < 0 ) {
-                        y2 += deviceHeight;
-                    }
-                } else {
-                    y1 += currentScroll;
-                    y2 += currentScroll;
-                    y1 %= deviceHeight;
-                    y2 %= deviceHeight;
-                }
-                if ( y1 > y2 ) {
-                    quickFill(color, x1, y1, x2, deviceHeight-1);
-                    quickFill(color, x1, 0, x2, y2);
-                } else {
-                    quickFill(color, x1, y1, x2, y2);
-                }
-                break;
-            case LANDSCAPE_FLIP:
-            case LANDSCAPE:
-                if ( orientation == LANDSCAPE_FLIP ) {
-                    x1 -= currentScroll;
-                    x2 -= currentScroll;
-                    if ( x1 < 0 ) {
-                        x1 += deviceHeight;
-                    }
-                    if ( x2 < 0 ) {
-                        x2 += deviceHeight;
-                    }
-                } else {
-                    x1 += currentScroll;
-                    x2 += currentScroll;
-                    x1 %= deviceHeight;
-                    x2 %= deviceHeight;
-                }
-                if ( x1 > x2 ) {
-                    quickFill(color, x1, y1, deviceHeight-1, y2);
-                    quickFill(color, 0, y1, x2, y2);
-                } else {
-                    quickFill(color, x1, y1, x2, y2);
-                }
-                break;
-            }
-            return;
+        if ( bb.y1 > bb.y2 ) {
+            quickFill(color, bb.x1, bb.y1, bb.x2, deviceHeight-1);
+            quickFill(color, bb.x1, 0, bb.x2, bb.y2);
+        } else {
+            quickFill(color, bb.x1, bb.y1, bb.x2, bb.y2);
         }
     }
 
-    quickFill(color, x1, y1, x2, y2);
+    endGfxOperation();
 }
 
 void PixelsBase::hLine(int16_t x1, int16_t y, int16_t x2) {
@@ -1763,3 +1921,85 @@ void PixelsBase::setCurrentPixel(RGB* color) {
     int16_t c = color->convertTo565();
     deviceWriteData(highByte(c), lowByte(c));
 }
+
+boolean PixelsBase::transformBounds(Bounds& bb) {
+
+    int16_t buf;
+    switch( orientation ) {
+    case PORTRAIT:
+        break;
+    case LANDSCAPE:
+        buf = bb.x1;
+        bb.x1 = deviceWidth - bb.y1 - 1;
+        bb.y1 = buf;
+        buf = bb.x2;
+        bb.x2 = deviceWidth - bb.y2 - 1;
+        bb.y2 = buf;
+        break;
+    case PORTRAIT_FLIP:
+        bb.y1 = deviceHeight - bb.y1 - 1;
+        bb.y2 = deviceHeight - bb.y2 - 1;
+        bb.x1 = deviceWidth - bb.x1 - 1;
+        bb.x2 = deviceWidth - bb.x2 - 1;
+        break;
+    case LANDSCAPE_FLIP:
+        buf = bb.y1;
+        bb.y1 = deviceHeight - bb.x1 - 1;
+        bb.x1 = buf;
+        buf = bb.y2;
+        bb.y2 = deviceHeight - bb.x2 - 1;
+        bb.x2 = buf;
+        break;
+    }
+
+    if (bb.y2 < bb.y1) {
+        swap(bb.y1, bb.y2);
+    }
+
+    if (bb.x2 < bb.x1) {
+        swap(bb.x1, bb.x2);
+    }
+
+    return true;
+}
+
+boolean PixelsBase::checkBounds(Bounds& bb) {
+    if (bb.x2 < bb.x1) {
+        swap(bb.x1, bb.x2);
+    }
+    if (bb.y2 < bb.y1) {
+        swap(bb.y1, bb.y2);
+    }
+
+    if ( bb.x1 < 0 ) {
+        if ( bb.x2 < 0 ) {
+            return false;
+        }
+        bb.x1 = 0;
+    }
+    if ( bb.x2 >= deviceWidth ) {
+        if ( bb.x1 >= deviceWidth ) {
+            return false;
+        }
+        bb.x2 = deviceWidth - 1;
+    }
+
+    int16_t s = (relativeOrigin && orientation > 1) ? (deviceHeight - currentScroll) % deviceHeight : 0;
+    if ( bb.y1 < s ) {
+        if ( bb.y2 < s ) {
+            return false;
+        }
+        bb.y1 = s;
+    }
+    s = (relativeOrigin && orientation < 2 && currentScroll > 0) ? currentScroll : deviceHeight;
+    if ( bb.y2 >= s ) {
+        if ( bb.y1 >= s ) {
+            return false;
+        }
+        bb.y2 = s - 1;
+    }
+
+    return true;
+}
+
+

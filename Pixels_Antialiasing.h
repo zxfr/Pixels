@@ -175,8 +175,8 @@ void PixelsAntialiased::drawRoundRectangleAntialiased(int16_t x, int16_t y, int1
     yc2 = y << 1;
 
     sab = sqrt((double)(a2 + b2));
-    od = (int)round(sab*0.01) + 1;
-    dxt = (int)round((double)a2 / sab) + od;
+    od = (int)iround(sab*0.01) + 1;
+    dxt = (int)iround((double)a2 / sab) + od;
 
     t = 0;
     s = -2 * a2 * ry;
@@ -250,7 +250,7 @@ void PixelsAntialiased::drawRoundRectangleAntialiased(int16_t x, int16_t y, int1
     }
 
     /* Replaces original approximation code dyt = abs(yp - yc); */
-    dyt = (int)round((double)b2 / sab ) + od;
+    dyt = (int)iround((double)b2 / sab ) + od;
 
     for (i = 1; i <= dyt; i++) {
         yp++;

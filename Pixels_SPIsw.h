@@ -106,6 +106,11 @@ public:
 
     inline void registerSelect() {
     }
+
+    void setSPIBitOrder(uint8_t bitOrder) {}
+    void setSPIDataMode(uint8_t mode) {}
+    void setSPIClockDivider(uint8_t rate) {}
+
 };
 
 void SPIsw::initInterface() {
@@ -143,6 +148,10 @@ void SPIsw::busWrite(uint8_t data) {
 }
 
 void SPIsw::writeCmd(uint8_t cmd) {
+#if defined(TEENSYDUINO)
+    chipSelect();
+#endif
+
     if ( eightBit ) {
         *registerWR &= ~bitmaskWR;
     } else {
@@ -151,9 +160,17 @@ void SPIsw::writeCmd(uint8_t cmd) {
         sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
     }
     busWrite(cmd);
+
+#if defined(TEENSYDUINO)
+    chipDeselect();
+#endif
 }
 
 void SPIsw::writeData(uint8_t data) {
+#if defined(TEENSYDUINO)
+    chipSelect();
+#endif
+
     if ( eightBit ) {
         *registerWR |= bitmaskWR;
     } else {
@@ -162,5 +179,9 @@ void SPIsw::writeData(uint8_t data) {
         sbi(registerSCL, bitmaskSCL);   // Pull SPI SCK low
     }
     busWrite(data);
+
+#if defined(TEENSYDUINO)
+    chipDeselect();
+#endif
 }
 #endif

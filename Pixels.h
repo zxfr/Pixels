@@ -32,7 +32,27 @@
 // #define NO_FILL_TEXT_BACKGROUND 1
 // #define NO_TEXT_WRAP 1
 
-#if defined(__arm__)
+
+#define SPI_CLOCK_DIV4 0x00
+#define SPI_CLOCK_DIV16 0x01
+#define SPI_CLOCK_DIV64 0x02
+#define SPI_CLOCK_DIV128 0x03
+#define SPI_CLOCK_DIV2 0x04
+#define SPI_CLOCK_DIV8 0x05
+#define SPI_CLOCK_DIV32 0x06
+// #define SPI_CLOCK_DIV64 0x07
+
+#define SPI_MODE0 0x00
+#define SPI_MODE1 0x04
+#define SPI_MODE2 0x08
+#define SPI_MODE3 0x0C
+
+#define SPI_MODE_MASK 0x0C  // CPOL = bit 3, CPHA = bit 2 on SPCR
+#define SPI_CLOCK_MASK 0x03  // SPR1 = bit 1, SPR0 = bit 0 on SPCR
+#define SPI_2XCLOCK_MASK 0x01  // SPI2X = bit 0 on SPSR
+
+
+#if defined(__SAM3X8E__)
 #include <avr/dtostrf.h>
 #endif
 
@@ -117,7 +137,7 @@
 
 
 #define ipart(X) ((int16_t)(X))
-#define round(X) ((uint16_t)(((double)(X))+0.5))
+#define iround(X) ((uint16_t)(((double)(X))+0.5))
 #define fpart(X) (((double)(X))-(double)ipart(X))
 #define rfpart(X) (1.0-fpart(X))
 
@@ -143,6 +163,21 @@ public:
     RGB convert565toRGB(uint16_t color);
     uint16_t convertRGBto565(RGB color);
     uint16_t convertTo565();
+};
+
+class Bounds {
+public:
+    int16_t x1;
+    int16_t y1;
+    int16_t x2;
+    int16_t y2;
+
+    Bounds( int16_t xx1, int16_t yy1, int16_t xx2, int16_t yy2 ) {
+        x1 = xx1;
+        y1 = yy1;
+        x2 = xx2;
+        y2 = yy2;
+    }
 };
 
 class PixelsBase {
@@ -178,6 +213,7 @@ protected:
     int16_t currentScroll;
     int16_t flipScroll;
     boolean scrollCleanMode;
+    uint16_t extraScrollDelay;
 
     int16_t caretX;
     int16_t caretY;
@@ -195,7 +231,10 @@ protected:
     RGB* textWrapScrollFill;
 #endif
 
-    int16_t getCharWidth(char c);
+    int gfxOpNestingDepth;
+
+    boolean transformBounds(Bounds& bb);
+    boolean checkBounds(Bounds& bb);
     void printString(int16_t xx, int16_t yy, String text, boolean clean, int8_t kerning[] = NULL);
     void drawGlyph(int16_t fontType, boolean clean, int16_t xx, int16_t yy,
                                int16_t height, prog_uchar* data, int16_t length);
@@ -204,7 +243,8 @@ protected:
     int16_t computeBreakPos(String text, int16_t t);
 #endif
 
-    virtual void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {}
+    virtual int32_t setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) { return -1; }
+
     void setCurrentPixel(RGB* color);
     void setCurrentPixel(int16_t color);
     void fill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2);
@@ -234,7 +274,25 @@ protected:
     RGB* bgBuffer;
     RGB* fgBuffer;
 
+    virtual void beginGfxOperation() {
+        chipSelect();
+        gfxOpNestingDepth++;
+    }
+
+    virtual void endGfxOperation(boolean force) {
+        gfxOpNestingDepth--;
+        if ( gfxOpNestingDepth <= 0 ) {
+            chipDeselect();
+            gfxOpNestingDepth = 0;
+        }
+    }
+
+    void endGfxOperation() {
+        endGfxOperation(false);
+    }
+
 public:
+
     /**
      * Constructs a new <code>Pixels</code> object for the reference platform TFT_PQ 2.4 (ILI9325 controller) + ITDB02 MEGA Shield v1.1.
      * @param width target device width (in pixels)
@@ -569,7 +627,7 @@ public:
      * @param    y   the <i>y</i> coordinate.
      * @see      drawBitmap(int16_t,int16_t,int16_t,int16_t,int[])
      */
-    int8_t drawCompressedBitmap(int16_t x, int16_t y, uint8_t* data);
+    int8_t drawCompressedBitmap(int16_t x, int16_t y, prog_uchar* data);
     /**
      * Draws an icon, prepared with Pixelmeister.
      * The icon is drawn with its top-left corner at
@@ -633,6 +691,18 @@ public:
      * @param flags can be 0, SCROLL_SMOOTH or/and SCROLL_CLEAN
      */
     void scroll(int16_t dy, int8_t flags);
+
+    /**
+     * Returns the current scroll position
+     */
+    int getScroll() {
+//        return orientation < 2 ? currentScroll : deviceHeight - currentScroll;
+        return currentScroll;
+    }
+
+    void setScrollStepDelay(uint16_t ms) {
+        extraScrollDelay = ms;
+    }
 
     /**
      * returns current print mode
@@ -774,23 +844,31 @@ public:
      * @return text baseline offset
      */
     int16_t getTextWidth(String text, int8_t kerning[] = NULL);
+
+    /**
+     * Returns width for a given character
+     */
+    int16_t getCharWidth(char c);
+
+
+    void scrollText( int16_t x, int16_t y, String text, uint8_t scrollStep, uint8_t repeat, uint16_t maxScroll );
 };
 
 class BitStream {
 private:
-    uint8_t* data;
+    prog_uchar* data;
     size_t size;
     int32_t bitpos;
 
 public:
-    BitStream (uint8_t* src_buffer, size_t byte_size, int8_t offset = 0) {
+    BitStream (prog_uchar* src_buffer, size_t byte_size, int8_t offset = 0) {
         bitpos = offset;
         data = src_buffer;
         size = byte_size + (offset>>3);
     }
 
     bool endOfData() {
-        return ((bitpos + 1) >> 3) >= size;
+        return (size_t)((bitpos + 1) >> 3) >= size;
     }
 
     uint8_t testCurrentByte() {

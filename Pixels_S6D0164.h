@@ -40,7 +40,7 @@ class Pixels : public PixelsBase
 #endif
 {
 protected:
-    void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
+    int32_t setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     void setFillDirection(uint8_t direction);
 
@@ -136,10 +136,10 @@ void Pixels::init() {
 }
 
 void Pixels::scrollCmd() {
-    chipSelect();
+    int16_t s = (orientation > 1 ? deviceHeight - currentScroll : currentScroll) % deviceHeight;
+//    int16_t s = (orientation < 2 ? deviceHeight - currentScroll : currentScroll) % deviceHeight;
     writeCmd(0x33);
-    deviceWriteData(highByte(currentScroll), lowByte(currentScroll));
-    chipDeselect();
+    deviceWriteData(highByte(s), lowByte(s));
 }
 
 void Pixels::setFillDirection(uint8_t direction) {
@@ -153,10 +153,10 @@ void Pixels::setFillDirection(uint8_t direction) {
 
 void Pixels::quickFill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
-    chipSelect();
-
-    setRegion(x1, y1, x2, y2);
-    int32_t counter = (int32_t)(x2 - x1 + 1) * (y2 - y1 + 1);
+    int32_t counter = setRegion(x1, y1, x2, y2);
+    if( counter == 0 ) {
+        return;
+    }
 
     registerSelect();
 
@@ -216,53 +216,23 @@ void Pixels::quickFill(int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2
             writeData(hi, lo);
         }
     }
-    chipDeselect();
 }
 
-void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
+int32_t Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
-    if ( orientation != PORTRAIT ) {
-        int16_t buf;
-        switch( orientation ) {
-        case LANDSCAPE:
-            buf = x1;
-            x1 = deviceWidth - y1 - 1;
-            y1 = buf;
-            buf = x2;
-            x2 = deviceWidth - y2 - 1;
-            y2 = buf;
-            break;
-        case PORTRAIT_FLIP:
-            y1 = deviceHeight - y1 - 1;
-            y2 = deviceHeight - y2 - 1;
-            x1 = deviceWidth - x1 - 1;
-            x2 = deviceWidth - x2 - 1;
-            break;
-        case LANDSCAPE_FLIP:
-            buf = y1;
-            y1 = deviceHeight - x1 - 1;
-            x1 = buf;
-            buf = y2;
-            y2 = deviceHeight - x2 - 1;
-            x2 = buf;
-            break;
-        }
-
-        if (x2 < x1) {
-            swap(x1, x2);
-        }
-        if (y2 < y1) {
-            swap(y1, y2);
-        }
+    Bounds bb(x1, y1, x2, y2);
+    if( !checkBounds(bb) ) {
+        return 0;
     }
 
-
-    writeCmdData(0x37, x1); // window address
-    writeCmdData(0x36, x2);
-    writeCmdData(0x39, y1);
-    writeCmdData(0x38, y2);
-    writeCmdData(0x20, x1); // start address
-    writeCmdData(0x21, y1);
+    writeCmdData(0x37, bb.x1); // window address
+    writeCmdData(0x36, bb.x2);
+    writeCmdData(0x39, bb.y1);
+    writeCmdData(0x38, bb.y2);
+    writeCmdData(0x20, bb.x1); // start address
+    writeCmdData(0x21, bb.y1);
     writeCmd(0x22);  // write ram
+
+    return (int32_t)(bb.x2 - bb.x1 + 1) * (bb.y2 - bb.y1 + 1);
 }
 #endif

@@ -44,7 +44,7 @@ protected:
         writeData(high, low);
     }
 
-    void setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
+    int32_t setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     void quickFill(int b, int16_t x1, int16_t y1, int16_t x2, int16_t y2);
     void setFillDirection(uint8_t direction);
 
@@ -57,7 +57,7 @@ public:
         setPpiPins(38, 39, 40, 41, 0); // dummy code in SPI case
     }
 
-    Pixels(uint16_t width, uint16_t height) : PixelsBase( width, height) {
+    Pixels(uint16_t width, uint16_t height) : PixelsBase(width, height) {
         scrollSupported = true;
         setSpiPins(4, 3, 7, 5, 6); // dummy code in PPI case
         setPpiPins(38, 39, 40, 41, 0); // dummy code in SPI case
@@ -123,10 +123,9 @@ void Pixels::init() {
 }
 
 void Pixels::scrollCmd() {
-    chipSelect();
+    int16_t s = (orientation > 1 ? deviceHeight - currentScroll : currentScroll) % deviceHeight;
     writeCmd(0x41);
-    deviceWriteData(highByte(currentScroll), lowByte(currentScroll));
-    chipDeselect();
+    deviceWriteData(highByte(s), lowByte(s));
 }
 
 void Pixels::setFillDirection(uint8_t direction) {
@@ -134,15 +133,16 @@ void Pixels::setFillDirection(uint8_t direction) {
 }
 
 void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
-    chipSelect();
 
-    setRegion(x1, y1, x2, y2);
-    int32_t counter = (int32_t)(x2 - x1 + 1) * (y2 - y1 + 1);
-
-    registerSelect();
+    int32_t counter = setRegion(x1, y1, x2, y2);
+    if( counter == 0 ) {
+        return;
+    }
 
     uint8_t lo = lowByte(color);
     uint8_t hi = highByte(color);
+
+    registerSelect();
 
     for (int16_t i = 0; i < counter / 20; i++) {
         writeData(hi, lo);
@@ -169,51 +169,23 @@ void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y
     for (int32_t i = 0; i < counter % 20; i++) {
         writeData(hi, lo);
     }
-
-    chipDeselect();
 }
 
-void Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
-    if ( orientation != PORTRAIT ) {
-        int16_t buf;
-        switch( orientation ) {
-        case LANDSCAPE:
-            buf = x1;
-            x1 = deviceWidth - y1 - 1;
-            y1 = buf;
-            buf = x2;
-            x2 = deviceWidth - y2 - 1;
-            y2 = buf;
-            break;
-        case PORTRAIT_FLIP:
-            y1 = deviceHeight - y1 - 1;
-            y2 = deviceHeight - y2 - 1;
-            x1 = deviceWidth - x1 - 1;
-            x2 = deviceWidth - x2 - 1;
-            break;
-        case LANDSCAPE_FLIP:
-            buf = y1;
-            y1 = deviceHeight - x1 - 1;
-            x1 = buf;
-            buf = y2;
-            y2 = deviceHeight - x2 - 1;
-            x2 = buf;
-            break;
-        }
+int32_t Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
 
-        if (x2 < x1) {
-            swap(x1, x2);
-        }
-        if (y2 < y1) {
-            swap(y1, y2);
-        }
+    Bounds bb(x1, y1, x2, y2);
+    if( !checkBounds(bb) ) {
+        return 0;
     }
 
-    writeCmdData(0x44,(x2<<8)+x1);
-    writeCmdData(0x45,y1);
-    writeCmdData(0x46,y2);
-    writeCmdData(0x4e,x1);
-    writeCmdData(0x4f,y1);
+    writeCmdData(0x44,(bb.x2<<8)+bb.x1);
+    writeCmdData(0x45,bb.y1);
+    writeCmdData(0x46,bb.y2);
+    writeCmdData(0x4e,bb.x1);
+    writeCmdData(0x4f,bb.y1);
     writeCmd(0x22);
+
+    return (int32_t)(bb.x2 - bb.x1 + 1) * (bb.y2 - bb.y1 + 1);
 }
+
 #endif
