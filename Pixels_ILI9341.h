@@ -186,10 +186,12 @@ void Pixels::init() {
 }
 
 void Pixels::scrollCmd() {
+    chipSelect();
     int16_t s = (orientation > 1 ? deviceHeight - currentScroll : currentScroll) % deviceHeight;
     writeCmd(0x37);
     writeData(highByte(s));
     writeData(lowByte(s));
+    chipDeselect();
 }
 
 void Pixels::setFillDirection(uint8_t direction) {
@@ -197,7 +199,8 @@ void Pixels::setFillDirection(uint8_t direction) {
 }
 
 void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y2) {
-
+    chipSelect();
+    
     int32_t counter = setRegion(x1, y1, x2, y2);
     if( counter == 0 ) {
         return;
@@ -233,6 +236,7 @@ void Pixels::quickFill (int color, int16_t x1, int16_t y1, int16_t x2, int16_t y
     for (int32_t i = 0; i < counter % 20; i++) {
         writeData(hi);writeData(lo);
     }
+    chipDeselect();
 }
 
 int32_t Pixels::setRegion(int16_t x1, int16_t y1, int16_t x2, int16_t y2) {

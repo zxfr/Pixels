@@ -15,6 +15,13 @@
  */
 
 #include "Pixels.h"
+#include <SPI.h>
+
+/* JK ADDITION */
+#define SPICLOCK 30000000
+#define WIDTH  ILI9341_TFTWIDTH
+#define HEIGHT ILI9341_TFTHEIGHT
+/* JK ADDITION END */
 
 RGB::RGB(uint8_t r, uint8_t g, uint8_t b) {
     setColor(r, g, b);
