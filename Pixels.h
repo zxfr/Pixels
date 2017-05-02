@@ -693,13 +693,17 @@ public:
     void scroll(int16_t dy, int8_t flags);
 
     /**
-     * Returns the current scroll position
+     * @return the current scroll position
      */
     int getScroll() {
-//        return orientation < 2 ? currentScroll : deviceHeight - currentScroll;
         return currentScroll;
     }
 
+    /**
+     * adds a ms pause to each scrolling step in smooth scrolling mode. Slows the scrolling down.
+     * It can be useful for performant MCU devices to adjust a scrolling speed and to make it acceptable for a reading.
+     * @param ms delay in milliseconds
+     */
     void setScrollStepDelay(uint16_t ms) {
         extraScrollDelay = ms;
     }
@@ -773,10 +777,22 @@ public:
 #endif
     }
 
+    /**
+     * @return horizontal caret position after a text string is printed.
+     * @see print(int16_t,int16_t,String,int8_t)
+     * @see enableTextWrap(marginLeft,marginRight,int16_t)
+     * @see enableTextWrapScroll(int16_t,RGB*)
+     */
     int16_t getCaretX() {
         return caretX;
     }
 
+    /**
+     * @return vertical caret position after a text string is printed.
+     * @see print(int16_t,int16_t,String,int8_t)
+     * @see enableTextWrap(marginLeft,marginRight,int16_t)
+     * @see enableTextWrapScroll(int16_t,RGB*)
+     */
     int16_t getCaretY() {
         return caretY;
     }
@@ -846,11 +862,25 @@ public:
     int16_t getTextWidth(String text, int8_t kerning[] = NULL);
 
     /**
-     * Returns width for a given character
+     * Returns width for a given character of the current font
+     * @param c character
+     * @return character width or 0 if no curresnt font set or the current font does not define the character glyph
      */
     int16_t getCharWidth(char c);
 
 
+    /**
+     * The method prints a given text and scrolls it out the device screen. As the method depends on hardware scrolling features,
+     * it auto-switches the axis orientation to LANDSCAPE from PORTRAIT and PORTRAIT_FLIP.
+     * @param x initial horizontal text coordinate
+     * @param y vertical text coordinate
+     * @param text text to display
+     * @param scrollStep scrolling step in pixels. Default value is 1. An increasing of the value speeds the scrolling up - it can be useful for low-end MCU devices and for software SPI data comminication method.
+     * @param repeat number of scroll loops (reapeatings of the text). Set repeat parameter to 0 for an infinite scrolling.
+     * @param maxScroll maximal scroll distance (in pixels) makes the scrolling stop by an exceeding.
+     *
+     * @see setScrollStepDelay(uint16_t)
+     */
     void scrollText( int16_t x, int16_t y, String text, uint8_t scrollStep, uint8_t repeat, uint16_t maxScroll );
 };
 
