@@ -15,4 +15,5 @@ prototypes (sketches) to be compiled for a target device.
 
 For more info see http://pd4ml.com/pixelmeister/pixels.htm
 
-
+Update: since Pixelmeister project is currently frozen you can use the command line utility to prepare fonts and images:
+https://github.com/zxfr/pixels.util
