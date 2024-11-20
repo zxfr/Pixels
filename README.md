@@ -13,7 +13,7 @@ The library is natively supported by Pixelmeister GUI modeling tool. Pixelmeiste
 desktop computers, converts TTF fonts and images to Pixels-friendly format and exports developed programs 
 prototypes (sketches) to be compiled for a target device. 
 
-For more info see http://pd4ml.com/pixelmeister/pixels.htm
+For more info see http://old.pd4ml.com/pixelmeister/pixels.htm
 
 Update: since Pixelmeister project is currently frozen you can use the command line utility to prepare fonts and images:
 https://github.com/zxfr/pixels.util
